@@ -1,9 +1,10 @@
 using System.IO.Packaging;
+using System.Threading.Tasks;
 
 namespace SigningService
 {
     internal interface IPackagePartSigner
     {
-        bool TrySign(PackagePart packagePart);
+        Task<bool> TrySign(PackagePart packagePart);
     }
 }

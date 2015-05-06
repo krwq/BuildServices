@@ -14,18 +14,21 @@ namespace SigningService
             _keyVaultAgent = keyVaultAgent;
         }
 
-        public bool TrySign(PackagePart packagePart)
+        public async Task<bool> TrySign(PackagePart packagePart)
         {
-            if (!CanSign(packagePart))
-                return false;
+            return await Task<bool>.Factory.StartNew(() =>
+            {
+                if (!CanSign(packagePart))
+                    return false;
 
-            var digest = GetDigest(packagePart);
+                var digest = GetDigest(packagePart);
 
-            var signedDigest = _keyVaultAgent.Sign(digest);
+                var signedDigest = _keyVaultAgent.Sign(digest);
 
-            InsertSignedDigest(packagePart, signedDigest);
+                InsertSignedDigest(packagePart, signedDigest);
 
-            return true;
+                return true;
+            });
         }
 
         private static bool CanSign(PackagePart packagePart)

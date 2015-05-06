@@ -2,6 +2,7 @@
 using System.IO.Packaging;
 using System.Threading.Tasks;
 using SigningService.Repositories;
+using System.Collections.Generic;
 
 namespace SigningService.Agents
 {
@@ -45,7 +46,7 @@ namespace SigningService.Agents
         {
             foreach (var signer in _signerRepository)
             {
-                signer.TrySign(packagePart);
+                signer.TrySignAsync(packagePart.GetStream()).Wait();
             }
         }
     }

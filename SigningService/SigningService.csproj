@@ -30,6 +30,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -143,6 +144,9 @@
     <Reference Include="Swashbuckle.Core">
       <HintPath>..\packages\Swashbuckle.Core.5.0.0\lib\net40\Swashbuckle.Core.dll</HintPath>
     </Reference>
+    <Reference Include="System.Collections.Immutable">
+      <HintPath>..\packages\System.Collections.Immutable.1.1.34-rc\lib\portable-net45+win8+wpa81\System.Collections.Immutable.dll</HintPath>
+    </Reference>
     <Reference Include="System.IdentityModel" />
     <Reference Include="System.IdentityModel.Tokens.Jwt">
       <HintPath>..\packages\System.IdentityModel.Tokens.Jwt.4.0.0\lib\net45\System.IdentityModel.Tokens.Jwt.dll</HintPath>
@@ -237,7 +241,64 @@
     <Compile Include="Services\Configuration\ServiceIdentitySettings.cs" />
     <Compile Include="Services\ExceptionHandling\TraceExceptionLogger.cs" />
     <Compile Include="Agents\SignAgent.cs" />
-    <Compile Include="StrongNameSigner.cs" />
+    <Compile Include="src\DataBlock.cs" />
+    <Compile Include="src\DataBlockHashing.cs" />
+    <Compile Include="src\ExceptionsHelper.cs" />
+    <Compile Include="src\MetadataReader\BlobReader.cs" />
+    <Compile Include="src\MetadataReader\COR20Constants.cs" />
+    <Compile Include="src\MetadataReader\CorElementType.cs" />
+    <Compile Include="src\MetadataReader\HandleKind.cs" />
+    <Compile Include="src\MetadataReader\Handles.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\AbstractMemoryBlock.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\ByteArrayMemoryBlock.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\ByteArrayMemoryProvider.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\ExternalMemoryBlock.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\ExternalMemoryBlockProvider.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\MemoryBlockProvider.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\MemoryMappedFileBlock.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\MetadataResources.Designer.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\NativeHeapMemoryBlock.cs" />
+    <Compile Include="src\MetadataReader\MetadataFlags.cs" />
+    <Compile Include="src\MetadataReader\MetadataStringDecoder.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\CoffHeader.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\CorFlags.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\CorHeader.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\DirectoryEntry.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\Machine.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\PEBinaryReader.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\PEFileConstants.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\PEFileFlags.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\PEHeader.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\PEHeaders.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\PEMemoryBlock.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\PEReader.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\PEStreamOptions.cs" />
+    <Compile Include="src\MetadataReader\PortableExecutable\SectionHeader.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\StreamConstraints.cs" />
+    <Compile Include="src\MetadataReader\MemoryBlocks\StreamMemoryBlockProvider.cs" />
+    <Compile Include="src\MetadataReader\SerializationTypeCode.cs" />
+    <Compile Include="src\MetadataReader\SignatureAttributes.cs" />
+    <Compile Include="src\MetadataReader\SignatureCallingConvention.cs" />
+    <Compile Include="src\MetadataReader\SignatureHeader.cs" />
+    <Compile Include="src\MetadataReader\SignatureKind.cs" />
+    <Compile Include="src\MetadataReader\SignatureTypeCode.cs" />
+    <Compile Include="src\MetadataReader\TableIndex.cs" />
+    <Compile Include="src\MetadataReader\Utilities\BitArithmetic.cs" />
+    <Compile Include="src\MetadataReader\Utilities\EmptyArray.cs" />
+    <Compile Include="src\MetadataReader\Utilities\EncodingHelper.cs" />
+    <Compile Include="src\MetadataReader\Utilities\FileStreamReadLightUp.cs" />
+    <Compile Include="src\MetadataReader\Utilities\ImmutableByteArrayInterop.cs" />
+    <Compile Include="src\MetadataReader\Utilities\ImmutableMemoryStream.cs" />
+    <Compile Include="src\MetadataReader\Utilities\LightUpHelper.cs" />
+    <Compile Include="src\MetadataReader\Utilities\MemoryBlock.cs" />
+    <Compile Include="src\MetadataReader\Utilities\MemoryMapLightUp.cs" />
+    <Compile Include="src\MetadataReader\Utilities\ObjectPool`1.cs" />
+    <Compile Include="src\MetadataReader\Utilities\ReadOnlyUnmanagedMemoryStream.cs" />
+    <Compile Include="src\MetadataReader\Utilities\StreamExtensions.cs" />
+    <Compile Include="src\StrongNameSigner.cs" />
+    <Compile Include="src\StrongNameSignerDataExtractor.cs" />
+    <Compile Include="src\StrongNameSignerException.cs" />
+    <Compile Include="StrongNameSignerService.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="apiapp.json" />

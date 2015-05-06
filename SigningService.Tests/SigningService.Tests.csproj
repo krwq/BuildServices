@@ -129,6 +129,9 @@
     <Content Include=".config\test\KeyVaultSettings.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="TestLib.delay.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <None Include=".config\test\ServiceIdentitySettings.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

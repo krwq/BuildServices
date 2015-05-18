@@ -12,6 +12,11 @@
             throw new StrongNameSignerException("DataBlockHashing value is invalid! (int)Value = {0}", (int)value);
         }
 
+        public static void ThrowBadFormatException()
+        {
+            throw new StrongNameSignerException("Bad format exception!");
+        }
+
         public static void ThrowPEImageHasNoSections()
         {
             throw new StrongNameSignerException("PE Image has no sections!");

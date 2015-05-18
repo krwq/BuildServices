@@ -1,7 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
+using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace SigningService
 {
@@ -17,11 +21,11 @@ namespace SigningService
 
             IsValidAssembly = true;
 
-            ExtractOffsets();
+            ExtractData();
             SpecialHashingBlocks = SortAndJoinIntersectingDataBlocks(GetSpecialHashingBlocks());
         }
 
-        private void ExtractOffsets()
+        private unsafe void ExtractData()
         {
             using (PEReader peReader = new PEReader(_peStream, PEStreamOptions.LeaveOpen | PEStreamOptions.PrefetchEntireImage | PEStreamOptions.PrefetchMetadata))
             {
@@ -61,6 +65,28 @@ namespace SigningService
                     IsValidAssembly = false;
                     ExceptionsHelper.ThrowPEImageHasNoSections();
                     return;
+                }
+
+                MetadataReader mr = peReader.GetMetadataReader();
+                AssemblyDefinition assemblyDef = mr.GetAssemblyDefinition();
+                PublicKey = mr.GetBlobBytes(assemblyDef.PublicKey);
+                PublicKeyToken = GetPublicKeyToken(PublicKey);
+
+                // Public Key consists of following field:
+                // - Signature algorithm (4 bytes)
+                // - Hash Algorithm (4 bytes)
+                // - Public Key size (4 bytes)
+                // - public Key (var size)
+                if (PublicKey.Length < 8)
+                {
+                    IsValidAssembly = false;
+                    ExceptionsHelper.ThrowBadFormatException();
+                    return;
+                }
+                fixed (byte* pk = PublicKey)
+                {
+                    int* hashAlg = (int*)(pk + 4);
+                    HashAlgorithm = (AssemblyHashAlgorithm)(*hashAlg);
                 }
             }
         }
@@ -216,6 +242,31 @@ namespace SigningService
             return ret;
         }
 
+        private static string GetPublicKeyToken(byte[] publicKey)
+        {
+            byte[] ret = new byte[8];
+            HashAlgorithm sha1 = SHA1.Create();
+
+            sha1.TransformFinalBlock(publicKey, 0, publicKey.Length);
+
+            for (int i = 0; i < 8; i++)
+            {
+                ret[i] = sha1.Hash[sha1.Hash.Length - i - 1];
+            }
+            
+            return ByteArrayToString(ret);
+        }
+
+        private static string ByteArrayToString(byte[] t)
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < t.Length; i++)
+            {
+                sb.Append(string.Format("{0:x2}", t[i]));
+            }
+            return sb.ToString();
+        }
+
         private Stream _peStream;
 
         public bool IsValidAssembly { get; private set; }
@@ -249,5 +300,9 @@ namespace SigningService
         public int PaddingBetweenTheSectionHeadersAndSectionsSize { get { return SectionsStartOffset - SectionsHeadersEndOffset; } }
 
         public List<DataBlock> SpecialHashingBlocks { get; private set; }
+
+        public byte[] PublicKey { get; private set; }
+        public string PublicKeyToken { get; private set; }
+        public AssemblyHashAlgorithm HashAlgorithm { get; private set; }
     }
 }

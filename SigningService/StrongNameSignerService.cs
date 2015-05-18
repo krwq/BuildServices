@@ -20,13 +20,13 @@ namespace SigningService
 
         public Task<bool> TrySignAsync(Stream peStream)
         {
-            StrongNameSigner strongNameSigner = new StrongNameSigner(_keyVaultAgent, peStream, SHA256.Create());
+            StrongNameSigner strongNameSigner = new StrongNameSigner(_keyVaultAgent, peStream);
             return strongNameSigner.TrySignAsync();
         }
 
         public bool CanSign(Stream peStream)
         {
-            StrongNameSigner strongNameSigner = new StrongNameSigner(_keyVaultAgent, peStream, SHA256.Create());
+            StrongNameSigner strongNameSigner = new StrongNameSigner(_keyVaultAgent, peStream);
             return strongNameSigner.CanSign();
         }
     }

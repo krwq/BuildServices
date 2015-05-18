@@ -5,6 +5,9 @@ using Its.Configuration;
 using Microsoft.Azure.KeyVault;
 using Microsoft.IdentityModel.Clients.ActiveDirectory;
 using SigningService.Services.Configuration;
+using System.Reflection;
+using Microsoft.Azure.KeyVault.WebKey;
+using System.Collections.Generic;
 
 namespace SigningService.Agents
 {
@@ -26,7 +29,29 @@ namespace SigningService.Agents
                         keyVaultSettings.Algorithm,
                         digest);
 
-            return signResult.Result;
+            byte[] ret = signResult.Result;
+            ByteArrayHelpers.ReverseInplace(ret);
+            return ret;
+        }
+
+        public async Task<IEnumerable<JsonWebKey>> GetKeys()
+        {
+            var client = new KeyVaultClient(GetAccessToken);
+            var keyVaultSettings = Settings.Get<KeyVaultSettings>();
+
+            //Task<JsonWebKey> jsonWebKeyLambda =
+
+            var keys = await client.GetKeysAsync(keyVaultSettings.Vault);
+
+            List<JsonWebKey> ret = new List<JsonWebKey>();
+
+            foreach (KeyItem k in keys.Value)
+            {
+                KeyBundle keybundle = await client.GetKeyAsync(k.Kid);
+                ret.Add(keybundle.Key);
+            }
+
+            return ret;
         }
 
         // https://samlman.wordpress.com/2015/05/01/fun-with-azure-key-vault-services/
@@ -45,6 +70,29 @@ namespace SigningService.Agents
             var result = await context.AcquireTokenAsync(resource, credential);
             
             return result.AccessToken;
+        }
+
+        public bool CanSign(byte[] publicKey, AssemblyHashAlgorithm hashAlgorithm)
+        {
+            if (!SupportsHashAlgorithm(hashAlgorithm))
+            {
+                return false;
+            }
+
+            throw new NotImplementedException();
+        }
+
+        private bool SupportsHashAlgorithm(AssemblyHashAlgorithm hashAlgorithm)
+        {
+            switch (hashAlgorithm)
+            {
+                case AssemblyHashAlgorithm.Sha256:
+                case AssemblyHashAlgorithm.Sha384:
+                case AssemblyHashAlgorithm.Sha512:
+                    return true;
+            }
+
+            return false;
         }
     }
 }

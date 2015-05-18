@@ -1,74 +1,156 @@
-﻿using System;
-using System.Linq;
-using FluentAssertions;
+﻿using FluentAssertions;
 using Its.Configuration;
+using Its.Log.Instrumentation;
 using Microsoft.Its.Recipes;
+using Moq;
 using SigningService.Agents;
-using Xunit;
-using System.Security.Cryptography;
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using Xunit;
+using Xunit.Abstractions;
+using Microsoft.Azure.KeyVault.WebKey;
+using System.Security.Cryptography.X509Certificates;
 
 namespace SigningService.Tests
 {
     public class KeyVaultAgentSpecs
     {
-        public static void PrintBytes(byte[] bytes)
+        private readonly ITestOutputHelper output;
+
+        public KeyVaultAgentSpecs(ITestOutputHelper output)
         {
-            for (int i = 0; i < bytes.Length; i++)
+            this.output = output;
+        }
+        public static IEnumerable<object[]> GetTestAssemblies()
+        {
+            return TestAssembly.GetTestAssemblies();
+        }
+
+        public void WriteLine(string format, params object[] args)
+        {
+            output.WriteLine(format, args);
+        }
+
+        public string ByteArrayToString(byte[] t)
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < t.Length; i++)
             {
-                if (i != 0)
-                {
-                    Console.Write("-");
-                }
-                Console.Write("{0:X2}", bytes[i]);
+                sb.Append(string.Format("{0:x2}", t[i]));
             }
-            Console.WriteLine();
+            return sb.ToString();
+        }
+
+        public string ByteArrayToReverseString(byte[] t)
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int i = t.Length - 1; i >= 0; i--)
+            {
+                sb.Append(string.Format("{0:x2}", t[i]));
+            }
+            return sb.ToString();
+        }
+
+        public void PrintMetadata(Stream peImage)
+        {
+            StrongNameSigner sns = new StrongNameSigner(null, peImage);
+
+            sns.SetStrongNameSignedFlag();
+            WriteLine("SNS dir size = {0}", sns.ExtractStrongNameSignature().Length);
+            WriteLine("HashAlgorithm = {0}", sns.GetHashAlgorithm());
+            WriteLine("Public Key Token = {0}", sns.GetPublicKeyToken());
+            //WriteLine("Public Key Size = {0}", sns.GetPublicKey().Length);
+            //WriteLine("Public Key Blob = {{ {0} }}", ByteArrayToString());
+            PublicKey pkr = new PublicKey(sns.GetPublicKey());
+            WriteLine("Public Key Modulus = {0}", ByteArrayToString(pkr.Modulus));
+            WriteLine("Public Key Exponent = {0}", pkr.Exponent);
+
+            peImage.Dispose();
         }
 
         [Fact]
-        public async void When_digest_has_32_bytes_the_response_has_256_bytes()
+        public async void Test()
         {
-            Settings.Precedence = new[] {"test"};
-            
+            Log.EntryPosted += (sender, e) => Console.WriteLine(e.LogEntry.ToString());
+
+            TestAssembly sha256 = new TestAssembly("TestLib.sha256.dll", null);
+            TestAssembly sha384 = new TestAssembly("TestLib.sha384.dll", null);
+            TestAssembly ppsha256delay = new TestAssembly("TestLib.delay.dll", null);
+            TestAssembly jscript = new TestAssembly("Microsoft.JScript.dll", null);
+
+            PrintMetadata(sha256.GetWritablePEImage());
+            PrintMetadata(sha384.GetWritablePEImage());
+            PrintMetadata(ppsha256delay.GetWritablePEImage());
+            PrintMetadata(jscript.GetWritablePEImage());
+
+            Settings.Precedence = new string [] { "test" };
+            var keyVaultAgent = new KeyVaultAgent();
+            IEnumerable<JsonWebKey> keys = await keyVaultAgent.GetKeys();
+            foreach (var key in keys)
+            {
+                RSAParameters rsap = new RSAParameters();
+                rsap.Modulus = key.N;
+                rsap.Exponent = key.E;
+                RSACryptoServiceProvider rsasp = new RSACryptoServiceProvider();
+
+                rsasp.ImportParameters(rsap);
+
+                WriteLine("key = {0}", key.Kid);
+                PublicKey pkr = new PublicKey(key.E, key.N);
+                WriteLine("Public Key Modulus = {0}", ByteArrayToString(pkr.Modulus));
+                WriteLine("Public Key Exponent = {0}", pkr.Exponent);
+                //WriteLine("REV(key.N) = {0}", ByteArrayToReverseString(key.N));
+                //WriteLine("REV(key.E) = {0}", ByteArrayToReverseString());
+                //byte[] pubKey = rsasp.ExportCspBlob(false);
+                //WriteLine("rsap.Length = {0}", pubKey.Length);
+                //WriteLine("rsap = {0}", ByteArrayToString(pubKey));
+            }
+        }
+
+        [Theory, MemberData("GetTestAssemblies")]
+        public async void RealSignTest(TestAssembly testAssembly)
+        {
+            Settings.Precedence = new string [] { "test" };
             var keyVaultAgent = new KeyVaultAgent();
 
-            byte[] expectedHash = new byte[] { 0xA3, 0x15, 0x35, 0xB5, 0x37, 0x6C, 0xC7, 0xE4, 0xCF, 0x16, 0x10, 0x25, 0xB3, 0xDD, 0xA6, 0xA3, 0x04, 0xEC, 0x8F, 0x80, 0x43, 0xD3, 0x47, 0xB8, 0xF1, 0x64, 0xD7, 0x2F, 0x9D, 0x42, 0x6D, 0x2E };
-            
-            byte[] expectedSignature = new byte[] {
-                0x8C, 0x03, 0x6B, 0xF3, 0xD4, 0xC4, 0xEB, 0xB6, 0x3D, 0xB7, 0x91, 0xE4, 0x65, 0x42, 0x95, 0x6F,
-                0x9E, 0x1D, 0x57, 0x73, 0x16, 0x5B, 0x5A, 0x76, 0x86, 0x11, 0x32, 0x2F, 0xB7, 0xC5, 0xF6, 0xBA,
-                0x19, 0x91, 0x8C, 0xCB, 0x63, 0x60, 0xE8, 0x3D, 0x44, 0xF5, 0x80, 0xDF, 0x8B, 0x2B, 0x35, 0xD0,
-                0x4B, 0x1D, 0x88, 0x5B, 0x29, 0xB0, 0xCD, 0xC4, 0xA7, 0x5B, 0x60, 0x2B, 0x80, 0x03, 0x08, 0xBF,
-                0x59, 0xB5, 0x73, 0x48, 0xF2, 0xA2, 0x6C, 0xB2, 0xAE, 0xFB, 0x28, 0x94, 0x84, 0x69, 0x29, 0x93,
-                0x88, 0x02, 0x96, 0x49, 0x4B, 0x27, 0x3B, 0x64, 0xAA, 0x40, 0x3A, 0x7A, 0x6D, 0x40, 0x20, 0x49,
-                0x47, 0xDA, 0x9C, 0x85, 0xE7, 0x8A, 0x18, 0x52, 0x4C, 0xBF, 0x9A, 0x80, 0xCF, 0x5A, 0x2D, 0xD2,
-                0xB7, 0x10, 0x60, 0x28, 0x82, 0x3F, 0xF0, 0x37, 0x43, 0x22, 0xA6, 0x43, 0x0C, 0x44, 0xFA, 0x60,
-                0xBC, 0x73, 0x8B, 0x3C, 0xDA, 0x7B, 0x1C, 0x4A, 0x60, 0x6A, 0x47, 0x07, 0x30, 0x76, 0x03, 0xAE,
-                0x8C, 0x7D, 0x3E, 0xFE, 0xF7, 0xB6, 0x38, 0xA1, 0x97, 0xEF, 0xD4, 0x5E, 0xF2, 0x3E, 0x44, 0x40,
-                0x9C, 0x4D, 0xAD, 0xE5, 0xCA, 0xA0, 0x05, 0x73, 0x46, 0xC9, 0x89, 0x3E, 0xED, 0x3F, 0xD9, 0x98,
-                0xD4, 0xA3, 0x0C, 0x1C, 0x68, 0xF1, 0x9E, 0x0B, 0x96, 0xCD, 0xC5, 0x4F, 0xE2, 0x2F, 0x46, 0xB3,
-                0x84, 0x37, 0xCA, 0x09, 0x11, 0x95, 0x4B, 0xB0, 0x3D, 0x60, 0x3D, 0x7D, 0xB0, 0xAC, 0x3E, 0x33,
-                0xE6, 0x02, 0x3B, 0xD0, 0x00, 0x63, 0x2B, 0x71, 0xF5, 0x00, 0x6A, 0x70, 0x67, 0xDF, 0x7B, 0x50,
-                0xC2, 0x10, 0xFD, 0x33, 0xF4, 0x85, 0x18, 0xCD, 0xB4, 0x0F, 0xA4, 0xC7, 0x02, 0xB8, 0xB2, 0x4F,
-                0xA4, 0x97, 0x15, 0x18, 0x73, 0x5C, 0x76, 0xAE, 0xD3, 0x2D, 0xFF, 0x73, 0x6F, 0x5B, 0xBC, 0x42
-            };
+            byte[] expectedSignature = Any.Sequence(i => Any.Byte(), 256).ToArray();
 
-            const string delaySignedPath = @"TestLib.delay.dll";
-            const string signedPath = @"TestLib.signed.dll";
-
-            using (FileStream outputPeImage = new FileStream(signedPath, FileMode.Create, FileAccess.ReadWrite))
+            using (Stream outputPeImage = testAssembly.GetWritablePEImage())
             {
-                using (FileStream peImage = new FileStream(delaySignedPath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read | FileShare.Delete))
-                {
-                    peImage.CopyTo(outputPeImage);
-                    outputPeImage.Seek(0, SeekOrigin.Begin);
-                }
-                StrongNameSigner strongNameSigner = new StrongNameSigner(keyVaultAgent, outputPeImage, SHA256.Create());
+                StrongNameSigner strongNameSigner = new StrongNameSigner(keyVaultAgent, outputPeImage);
                 bool result = await strongNameSigner.TrySignAsync();
                 result.Should().BeTrue();
-                strongNameSigner.ComputeHash().Should().BeEquivalentTo(expectedHash);
+                //strongNameSigner.ComputeHash().Should().BeEquivalentTo(testAssembly.StrongNameSignatureHash);
+                //strongNameSigner.ExtractStrongNameSignature().Should().BeEquivalentTo(expectedSignature);
+            }
+        }
+
+        [Theory, MemberData("GetTestAssemblies")]
+        public async void When_digest_has_32_bytes_the_response_has_256_bytes(TestAssembly testAssembly)
+        {
+            var keyVaultAgentMock = new Mock<IKeyVaultAgent>(MockBehavior.Strict);
+
+            byte[] expectedSignature = Any.Sequence(i => Any.Byte(), 256).ToArray();
+
+            keyVaultAgentMock
+                .Setup(k => k.Sign(It.Is<byte[]>(d => d.SequenceEqual(testAssembly.StrongNameSignatureHash))))
+                .Returns(Task.FromResult(expectedSignature));
+
+            using (Stream outputPeImage = testAssembly.GetWritablePEImage())
+            {
+                StrongNameSigner strongNameSigner = new StrongNameSigner(keyVaultAgentMock.Object, outputPeImage);
+                bool result = await strongNameSigner.TrySignAsync();
+                result.Should().BeTrue();
+                strongNameSigner.ComputeHash().Should().BeEquivalentTo(testAssembly.StrongNameSignatureHash);
                 strongNameSigner.ExtractStrongNameSignature().Should().BeEquivalentTo(expectedSignature);
             }
+
+            keyVaultAgentMock.Verify(k => k.Sign(It.Is<byte[]>(d => d.SequenceEqual(testAssembly.StrongNameSignatureHash))), Times.Once);
         }
 
         [Fact]

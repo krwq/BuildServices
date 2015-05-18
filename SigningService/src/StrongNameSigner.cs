@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using System.Reflection;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text;
@@ -12,30 +12,17 @@ namespace SigningService
 {
     public class StrongNameSigner
     {
-        private HashAlgorithm _hashAlgorithm;
+        private Lazy<HashAlgorithm> _hashAlgorithm;
         private readonly IKeyVaultAgent _keyVaultAgent;
         private Stream _peStream;
         private Lazy<StrongNameSignerDataExtractor> _dataExtractor;
         private bool _strongNameSignedBitSet = false;
-        public StrongNameSigner(IKeyVaultAgent keyVaultAgent, Stream peStream, HashAlgorithm hashAlgorithm)
+        public StrongNameSigner(IKeyVaultAgent keyVaultAgent, Stream peStream)
         {
             _keyVaultAgent = keyVaultAgent;
             _peStream = peStream;
-            _hashAlgorithm = hashAlgorithm;
             _dataExtractor = new Lazy<StrongNameSignerDataExtractor>(ExtractData);
-        }
-
-        private static void ReverseBytesInplace(byte[] bytes)
-        {
-            int i = 0, j = bytes.Length - 1;
-            while (i < j)
-            {
-                byte c = bytes[i];
-                bytes[i] = bytes[j];
-                bytes[j] = c;
-                i++;
-                j--;
-            }
+            _hashAlgorithm = new Lazy<HashAlgorithm>(CreateHashAlgorithm);
         }
 
         public async Task<bool> TrySignAsync()
@@ -44,7 +31,6 @@ namespace SigningService
             {
                 byte[] hash = PrepareForSigningAndComputeHash(_peStream);
                 byte[] signature = await _keyVaultAgent.Sign(hash);
-                ReverseBytesInplace(signature);
                 EmbedStrongNameSignature(signature);
                 return true;
             }
@@ -67,7 +53,8 @@ namespace SigningService
             ret &= dataExtractor.IsValidAssembly;
             ret &= !dataExtractor.HasStrongNameSignedFlag;
             ret &= dataExtractor.HasStrongNameSignatureDirectory;
-            int hashSize = _hashAlgorithm.HashSize;
+            ret &= _hashAlgorithm != null;
+            //int hashSize = _hashAlgorithm.HashSize;
             // TODO: We need a way of predicting expected signature length
             return  ret;
         }
@@ -113,6 +100,37 @@ namespace SigningService
             }
         }
 
+        public byte[] GetPublicKey()
+        {
+            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            return dataExtractor.PublicKey;
+        }
+
+        public string GetPublicKeyToken()
+        {
+            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            return dataExtractor.PublicKeyToken;
+        }
+
+        public AssemblyHashAlgorithm GetHashAlgorithm()
+        {
+            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            return dataExtractor.HashAlgorithm;
+        }
+
+        private HashAlgorithm CreateHashAlgorithm()
+        {
+            switch (GetHashAlgorithm())
+            {
+                case AssemblyHashAlgorithm.MD5: return MD5.Create();
+                case AssemblyHashAlgorithm.Sha1: return SHA1.Create();
+                case AssemblyHashAlgorithm.Sha256: return SHA256.Create();
+                case AssemblyHashAlgorithm.Sha384: return SHA384.Create();
+                case AssemblyHashAlgorithm.Sha512: return SHA512.Create();
+            }
+            return null;
+        }
+
         private byte[] PrepareForSigningAndComputeHash(Stream writablePEStream)
         {
             if (!writablePEStream.CanWrite)
@@ -122,7 +140,7 @@ namespace SigningService
             }
 
             PrepareForSigning(writablePEStream);
-            return CalculateAssemblyHash(writablePEStream, _hashAlgorithm, _dataExtractor.Value.SpecialHashingBlocks);
+            return CalculateAssemblyHash(writablePEStream, _hashAlgorithm.Value, _dataExtractor.Value.SpecialHashingBlocks);
         }
 
         private void PrepareForSigning(Stream writablePEStream)

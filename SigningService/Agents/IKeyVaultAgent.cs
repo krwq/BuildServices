@@ -6,7 +6,6 @@ namespace SigningService.Agents
     public interface IKeyVaultAgent
     {
         Task<byte[]> SignAsync(string keyId, byte[] digest);
-        Task<bool> CanSignAsync(PublicKey publicKey, AssemblyHashAlgorithm hashAlgorithm);
-        Task<string> GetKeyIdAsync(PublicKey publicKey);
+        Task<string> GetRsaKeyIdAsync(byte[] exponent, byte[] modulus);
     }
 }

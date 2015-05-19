@@ -1,4 +1,5 @@
 ﻿using SigningService.Agents;
+using SigningService.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,21 +9,23 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SigningService
+namespace SigningService.Signers.StrongName
 {
-    public class StrongNameSigner
+    internal class StrongNameSignerHelper
     {
         private Lazy<HashAlgorithm> _hashAlgorithm;
         private readonly IKeyVaultAgent _keyVaultAgent;
+        private Lazy<Task<string>> _keyVaultKeyId;
         private Stream _peStream;
         private Lazy<StrongNameSignerDataExtractor> _dataExtractor;
         private bool _strongNameSignedBitSet = false;
-        public StrongNameSigner(IKeyVaultAgent keyVaultAgent, Stream peStream)
+        public StrongNameSignerHelper(IKeyVaultAgent keyVaultAgent, Stream peStream)
         {
             _keyVaultAgent = keyVaultAgent;
             _peStream = peStream;
             _dataExtractor = new Lazy<StrongNameSignerDataExtractor>(ExtractData);
             _hashAlgorithm = new Lazy<HashAlgorithm>(CreateHashAlgorithm);
+            _keyVaultKeyId = new Lazy<Task<string>>(GetKeyVaultKeyIdFromKeyVaultAsync);
         }
 
         public async Task<bool> TrySignAsync()
@@ -30,7 +33,7 @@ namespace SigningService
             if (await CanSignAsync())
             {
                 byte[] hash = PrepareForSigningAndComputeHash(_peStream);
-                string keyId = await GetKeyVaultKeyIdAsync();
+                string keyId = await _keyVaultKeyId.Value;
                 byte[] signature = await _keyVaultAgent.SignAsync(keyId, hash);
                 EmbedStrongNameSignature(signature);
                 return true;
@@ -39,9 +42,16 @@ namespace SigningService
             return false;
         }
 
-        public async Task<string> GetKeyVaultKeyIdAsync()
+        // Do not call directly, use _keyVaultKeyId.Value instead
+        // This method should be called only during lazy initialization of _keyVaultKeyId
+        private async Task<string> GetKeyVaultKeyIdFromKeyVaultAsync()
         {
-            return await _keyVaultAgent.GetKeyIdAsync(PublicKey);
+            return await _keyVaultAgent.GetRsaKeyIdAsync(PublicKey.Exponent, PublicKey.Modulus);
+        }
+
+        public async Task<string> GetKeyVaultKeyId()
+        {
+            return await _keyVaultKeyId.Value;
         }
 
         public bool HasStrongNameSignature()
@@ -51,7 +61,7 @@ namespace SigningService
             return hasStrongNameSignedBit && dataExtractor.HasStrongNameSignatureDirectory;
         }
 
-        public Task<bool> CanSignAsync()
+        public async Task<bool> CanSignAsync()
         {
             StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
 
@@ -60,16 +70,18 @@ namespace SigningService
             ret &= !dataExtractor.HasStrongNameSignedFlag;
             ret &= dataExtractor.HasStrongNameSignatureDirectory;
             ret &= _hashAlgorithm != null;
+            ret &= SupportsHashAlgorithm(HashAlgorithm);
             //int hashSize = _hashAlgorithm.HashSize;
             // TODO: We need a way of predicting expected signature length
 
             if (!ret)
             {
                 // No need for actual async
-                return Task.FromResult(false);
+                return false;
             }
 
-            return _keyVaultAgent.CanSignAsync(PublicKey, HashAlgorithm);
+            string keyId = await _keyVaultKeyId.Value;
+            return keyId != null;
         }
 
         public bool CanHash
@@ -150,6 +162,17 @@ namespace SigningService
                 StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
                 return dataExtractor.HashAlgorithm;
             }
+        }
+
+        public static bool SupportsHashAlgorithm(AssemblyHashAlgorithm hashAlgorithm)
+        {
+            switch (hashAlgorithm)
+            {
+                case AssemblyHashAlgorithm.Sha256:
+                    return true;
+            }
+
+            return false;
         }
 
         private HashAlgorithm CreateHashAlgorithm()

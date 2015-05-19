@@ -1,4 +1,4 @@
-﻿namespace SigningService
+﻿namespace SigningService.Signers.StrongName
 {
     internal static class ExceptionsHelper
     {

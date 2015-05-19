@@ -1,9 +1,7 @@
 using System.IO;
-using System.IO.Packaging;
-using System.Security.Cryptography;
 using System.Threading.Tasks;
 
-namespace SigningService
+namespace SigningService.Signers
 {
     internal interface IPackagePartSigner
     {

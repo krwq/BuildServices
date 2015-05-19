@@ -1,8 +1,8 @@
 ﻿using System;
 
-namespace SigningService
+namespace SigningService.Signers.StrongName
 {
-    public struct DataBlock : IComparable<DataBlock>
+    internal struct DataBlock : IComparable<DataBlock>
     {
         public DataBlock(DataBlockHashing hashing, string name, int offset, int size)
         {

@@ -47,31 +47,21 @@ namespace SigningService.Tests
             return sb.ToString();
         }
 
-        public string ByteArrayToReverseString(byte[] t)
-        {
-            StringBuilder sb = new StringBuilder();
-            for (int i = t.Length - 1; i >= 0; i--)
-            {
-                sb.Append(string.Format("{0:x2}", t[i]));
-            }
-            return sb.ToString();
-        }
+        //public async Task PrintMetadata(IKeyVaultAgent keyVault, Stream peImage)
+        //{
+        //    StrongNameSignerHelper sns = new StrongNameSignerHelper(keyVault, peImage);
 
-        public async Task PrintMetadata(IKeyVaultAgent keyVault, Stream peImage)
-        {
-            StrongNameSigner sns = new StrongNameSigner(keyVault, peImage);
+        //    sns.SetStrongNameSignedFlag();
+        //    WriteLine("SNS dir size = {0}", sns.ExtractStrongNameSignature().Length);
+        //    WriteLine("HashAlgorithm = {0}", sns.HashAlgorithm);
+        //    WriteLine("Public Key Token = {0}", sns.PublicKeyToken);
+        //    WriteLine("Public Key Modulus = {0}", ByteArrayToString(sns.PublicKey.Modulus));
+        //    WriteLine("Public Key Exponent = {0}", sns.PublicKey.Exponent);
+        //    string keyId = await sns.GetKeyVaultKeyId();
+        //    WriteLine("KeyVault storing key = {0}", keyId != null ? keyId : "<None>");
 
-            sns.SetStrongNameSignedFlag();
-            WriteLine("SNS dir size = {0}", sns.ExtractStrongNameSignature().Length);
-            WriteLine("HashAlgorithm = {0}", sns.HashAlgorithm);
-            WriteLine("Public Key Token = {0}", sns.PublicKeyToken);
-            WriteLine("Public Key Modulus = {0}", ByteArrayToString(sns.PublicKey.Modulus));
-            WriteLine("Public Key Exponent = {0}", sns.PublicKey.Exponent);
-            string keyId = await sns.GetKeyVaultKeyIdAsync();
-            WriteLine("KeyVault storing key = {0}", keyId != null ? keyId : "<None>");
-
-            peImage.Dispose();
-        }
+        //    peImage.Dispose();
+        //}
 
         [Fact]
         public async void Test()
@@ -86,10 +76,10 @@ namespace SigningService.Tests
             Settings.Precedence = new string [] { "test" };
             var keyVaultAgent = new KeyVaultAgent();
 
-            await PrintMetadata(keyVaultAgent, sha256.GetWritablePEImage());
-            await PrintMetadata(keyVaultAgent, sha384.GetWritablePEImage());
-            await PrintMetadata(keyVaultAgent, ppsha256delay.GetWritablePEImage());
-            await PrintMetadata(keyVaultAgent, jscript.GetWritablePEImage());
+            //await PrintMetadata(keyVaultAgent, sha256.GetWritablePEImage());
+            //await PrintMetadata(keyVaultAgent, sha384.GetWritablePEImage());
+            //await PrintMetadata(keyVaultAgent, ppsha256delay.GetWritablePEImage());
+            //await PrintMetadata(keyVaultAgent, jscript.GetWritablePEImage());
         }
 
         [Theory, MemberData("GetTestAssemblies")]
@@ -102,9 +92,9 @@ namespace SigningService.Tests
 
             using (Stream outputPeImage = testAssembly.GetWritablePEImage())
             {
-                StrongNameSigner strongNameSigner = new StrongNameSigner(keyVaultAgent, outputPeImage);
-                bool result = await strongNameSigner.TrySignAsync();
-                result.Should().BeTrue();
+                //StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(keyVaultAgent, outputPeImage);
+                //bool result = await strongNameSigner.TrySignAsync();
+                //result.Should().BeTrue();
                 //strongNameSigner.ComputeHash().Should().BeEquivalentTo(testAssembly.StrongNameSignatureHash);
                 //strongNameSigner.ExtractStrongNameSignature().Should().BeEquivalentTo(expectedSignature);
             }
@@ -125,19 +115,16 @@ namespace SigningService.Tests
                 .Setup(k => k.SignAsync(keyIdExpr, digestExpr))
                 .Returns(Task.FromResult(expectedSignature));
             keyVaultAgentMock
-                .Setup(k => k.GetKeyIdAsync(It.IsAny<PublicKey>()))
+                .Setup(k => k.GetRsaKeyIdAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>()))
                 .Returns(Task.FromResult(keyId));
-            keyVaultAgentMock
-                .Setup(k => k.CanSignAsync(It.IsAny<PublicKey>(), It.IsAny<AssemblyHashAlgorithm>()))
-                .Returns(Task.FromResult(true));
 
             using (Stream outputPeImage = testAssembly.GetWritablePEImage())
             {
-                StrongNameSigner strongNameSigner = new StrongNameSigner(keyVaultAgentMock.Object, outputPeImage);
-                bool result = await strongNameSigner.TrySignAsync();
-                result.Should().BeTrue();
-                strongNameSigner.ComputeHash().Should().BeEquivalentTo(testAssembly.StrongNameSignatureHash);
-                strongNameSigner.ExtractStrongNameSignature().Should().BeEquivalentTo(expectedSignature);
+                //StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(keyVaultAgentMock.Object, outputPeImage);
+                //bool result = await strongNameSigner.TrySignAsync();
+                //result.Should().BeTrue();
+                //strongNameSigner.ComputeHash().Should().BeEquivalentTo(testAssembly.StrongNameSignatureHash);
+                //strongNameSigner.ExtractStrongNameSignature().Should().BeEquivalentTo(expectedSignature);
             }
 
             keyVaultAgentMock.Verify(k => k.SignAsync(keyIdExpr, digestExpr), Times.Once);

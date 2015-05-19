@@ -5,7 +5,7 @@ namespace SigningService.Tests
 {
     public struct TestAssembly
     {
-        public TestAssembly(string resourceName, byte[] strongNameSignatureHash)
+        public TestAssembly(string resourceName, byte[] strongNameSignatureHash = null)
         {
             ResourceName = resourceName;
             StrongNameSignatureHash = strongNameSignatureHash;

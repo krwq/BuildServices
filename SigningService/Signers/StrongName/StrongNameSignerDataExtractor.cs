@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SigningService.Models;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -7,10 +8,10 @@ using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace SigningService
+namespace SigningService.Signers.StrongName
 {
     // Extracts all data needed to calculate hash, verify if assembly is signable and to sign it
-    public class StrongNameSignerDataExtractor
+    internal class StrongNameSignerDataExtractor
     {
         public StrongNameSignerDataExtractor(Stream peStream)
         {
@@ -70,7 +71,7 @@ namespace SigningService
                 MetadataReader mr = peReader.GetMetadataReader();
                 AssemblyDefinition assemblyDef = mr.GetAssemblyDefinition();
                 PublicKeyBlob = mr.GetBlobBytes(assemblyDef.PublicKey);
-                PublicKey = new PublicKey(PublicKeyBlob);
+                PublicKey = PublicKeyHelper.GetPublicKeyFromPublicKeyBlob(PublicKeyBlob);
                 PublicKeyToken = GetPublicKeyToken(PublicKeyBlob);
 
                 // Public Key consists of following field:
@@ -114,7 +115,7 @@ namespace SigningService
         }
 
         // Sorts by offsets and joins adjacent blocks
-        // THIS IS SIMPLE IMPLEMENTATION which assumes there is gonna be up to 2 overlapping blocks.
+        // THIS IS SIMPLE IMPLEMENTATION which assumes there is are up to 2 overlapping blocks at a time.
         // This might not work properly for 3 or more overlapping blocks.
         // TODO: Use priority to determine what hashing action we should take.
         //       We should use PriorityQueue implementation and split blocks into (begin, offset, id) (end, offset, id)

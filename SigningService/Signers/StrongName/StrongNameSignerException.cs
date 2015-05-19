@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace SigningService
+namespace SigningService.Signers.StrongName
 {
     public class StrongNameSignerException : Exception
     {

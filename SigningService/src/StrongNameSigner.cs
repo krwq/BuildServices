@@ -27,15 +27,21 @@ namespace SigningService
 
         public async Task<bool> TrySignAsync()
         {
-            if (CanSign())
+            if (await CanSignAsync())
             {
                 byte[] hash = PrepareForSigningAndComputeHash(_peStream);
-                byte[] signature = await _keyVaultAgent.Sign(hash);
+                string keyId = await GetKeyVaultKeyIdAsync();
+                byte[] signature = await _keyVaultAgent.SignAsync(keyId, hash);
                 EmbedStrongNameSignature(signature);
                 return true;
             }
 
             return false;
+        }
+
+        public async Task<string> GetKeyVaultKeyIdAsync()
+        {
+            return await _keyVaultAgent.GetKeyIdAsync(PublicKey);
         }
 
         public bool HasStrongNameSignature()
@@ -45,7 +51,7 @@ namespace SigningService
             return hasStrongNameSignedBit && dataExtractor.HasStrongNameSignatureDirectory;
         }
 
-        public bool CanSign()
+        public Task<bool> CanSignAsync()
         {
             StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
 
@@ -56,12 +62,22 @@ namespace SigningService
             ret &= _hashAlgorithm != null;
             //int hashSize = _hashAlgorithm.HashSize;
             // TODO: We need a way of predicting expected signature length
-            return  ret;
+
+            if (!ret)
+            {
+                // No need for actual async
+                return Task.FromResult(false);
+            }
+
+            return _keyVaultAgent.CanSignAsync(PublicKey, HashAlgorithm);
         }
 
-        public bool CanHash()
+        public bool CanHash
         {
-            return _peStream.CanSeek && _peStream.CanRead && _dataExtractor.Value.IsValidAssembly;
+            get
+            {
+                return _peStream.CanSeek && _peStream.CanRead && _dataExtractor.Value.IsValidAssembly;
+            }
         }
 
         public void EmbedStrongNameSignature(byte[] signature)
@@ -100,27 +116,45 @@ namespace SigningService
             }
         }
 
-        public byte[] GetPublicKey()
+        public byte[] PublicKeyBlob
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-            return dataExtractor.PublicKey;
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.PublicKeyBlob;
+            }
         }
 
-        public string GetPublicKeyToken()
+        public PublicKey PublicKey
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-            return dataExtractor.PublicKeyToken;
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.PublicKey;
+            }
         }
 
-        public AssemblyHashAlgorithm GetHashAlgorithm()
+        public string PublicKeyToken
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-            return dataExtractor.HashAlgorithm;
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.PublicKeyToken;
+            }
+        }
+
+        public AssemblyHashAlgorithm HashAlgorithm
+        {
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.HashAlgorithm;
+            }
         }
 
         private HashAlgorithm CreateHashAlgorithm()
         {
-            switch (GetHashAlgorithm())
+            switch (HashAlgorithm)
             {
                 case AssemblyHashAlgorithm.MD5: return MD5.Create();
                 case AssemblyHashAlgorithm.Sha1: return SHA1.Create();

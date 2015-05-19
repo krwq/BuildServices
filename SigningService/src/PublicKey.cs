@@ -85,5 +85,49 @@ namespace SigningService
 
             return Exponent == other.Exponent && ByteArrayHelpers.ArraysEqual(Modulus, other.Modulus);
         }
+
+        public override int GetHashCode()
+        {
+            if (Modulus == null)
+            {
+                return 0;
+            }
+
+            uint hash;
+            if (Modulus.Length >= 4)
+            {
+                uint a = Modulus[0];
+                uint b = Modulus[1];
+                uint c = Modulus[Modulus.Length - 2];
+                uint d = Modulus[Modulus.Length - 1];
+
+                a <<= 0;
+                b <<= 8;
+                c <<= 16;
+                d <<= 24;
+                hash = a | b | c | d;
+                return unchecked((int)hash);
+            }
+
+            hash = 0;
+            for (int i = 0; i < Modulus.Length; i++)
+            {
+                uint val = Modulus[i];
+                hash |= val << (i * 8);
+            }
+            return unchecked((int)hash);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj == null || GetType() != obj.GetType())
+            {
+                return false;
+            }
+
+            PublicKey pk = (PublicKey)obj;
+
+            return  Exponent == pk.Exponent && ByteArrayHelpers.ArraysEqual(Modulus, pk.Modulus);
+        }
     }
 }

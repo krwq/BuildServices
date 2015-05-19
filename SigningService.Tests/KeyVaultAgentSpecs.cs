@@ -15,6 +15,7 @@ using Xunit;
 using Xunit.Abstractions;
 using Microsoft.Azure.KeyVault.WebKey;
 using System.Security.Cryptography.X509Certificates;
+using System.Reflection;
 
 namespace SigningService.Tests
 {
@@ -56,19 +57,18 @@ namespace SigningService.Tests
             return sb.ToString();
         }
 
-        public void PrintMetadata(Stream peImage)
+        public async Task PrintMetadata(IKeyVaultAgent keyVault, Stream peImage)
         {
-            StrongNameSigner sns = new StrongNameSigner(null, peImage);
+            StrongNameSigner sns = new StrongNameSigner(keyVault, peImage);
 
             sns.SetStrongNameSignedFlag();
             WriteLine("SNS dir size = {0}", sns.ExtractStrongNameSignature().Length);
-            WriteLine("HashAlgorithm = {0}", sns.GetHashAlgorithm());
-            WriteLine("Public Key Token = {0}", sns.GetPublicKeyToken());
-            //WriteLine("Public Key Size = {0}", sns.GetPublicKey().Length);
-            //WriteLine("Public Key Blob = {{ {0} }}", ByteArrayToString());
-            PublicKey pkr = new PublicKey(sns.GetPublicKey());
-            WriteLine("Public Key Modulus = {0}", ByteArrayToString(pkr.Modulus));
-            WriteLine("Public Key Exponent = {0}", pkr.Exponent);
+            WriteLine("HashAlgorithm = {0}", sns.HashAlgorithm);
+            WriteLine("Public Key Token = {0}", sns.PublicKeyToken);
+            WriteLine("Public Key Modulus = {0}", ByteArrayToString(sns.PublicKey.Modulus));
+            WriteLine("Public Key Exponent = {0}", sns.PublicKey.Exponent);
+            string keyId = await sns.GetKeyVaultKeyIdAsync();
+            WriteLine("KeyVault storing key = {0}", keyId != null ? keyId : "<None>");
 
             peImage.Dispose();
         }
@@ -83,33 +83,13 @@ namespace SigningService.Tests
             TestAssembly ppsha256delay = new TestAssembly("TestLib.delay.dll", null);
             TestAssembly jscript = new TestAssembly("Microsoft.JScript.dll", null);
 
-            PrintMetadata(sha256.GetWritablePEImage());
-            PrintMetadata(sha384.GetWritablePEImage());
-            PrintMetadata(ppsha256delay.GetWritablePEImage());
-            PrintMetadata(jscript.GetWritablePEImage());
-
             Settings.Precedence = new string [] { "test" };
             var keyVaultAgent = new KeyVaultAgent();
-            IEnumerable<JsonWebKey> keys = await keyVaultAgent.GetKeys();
-            foreach (var key in keys)
-            {
-                RSAParameters rsap = new RSAParameters();
-                rsap.Modulus = key.N;
-                rsap.Exponent = key.E;
-                RSACryptoServiceProvider rsasp = new RSACryptoServiceProvider();
 
-                rsasp.ImportParameters(rsap);
-
-                WriteLine("key = {0}", key.Kid);
-                PublicKey pkr = new PublicKey(key.E, key.N);
-                WriteLine("Public Key Modulus = {0}", ByteArrayToString(pkr.Modulus));
-                WriteLine("Public Key Exponent = {0}", pkr.Exponent);
-                //WriteLine("REV(key.N) = {0}", ByteArrayToReverseString(key.N));
-                //WriteLine("REV(key.E) = {0}", ByteArrayToReverseString());
-                //byte[] pubKey = rsasp.ExportCspBlob(false);
-                //WriteLine("rsap.Length = {0}", pubKey.Length);
-                //WriteLine("rsap = {0}", ByteArrayToString(pubKey));
-            }
+            await PrintMetadata(keyVaultAgent, sha256.GetWritablePEImage());
+            await PrintMetadata(keyVaultAgent, sha384.GetWritablePEImage());
+            await PrintMetadata(keyVaultAgent, ppsha256delay.GetWritablePEImage());
+            await PrintMetadata(keyVaultAgent, jscript.GetWritablePEImage());
         }
 
         [Theory, MemberData("GetTestAssemblies")]
@@ -135,11 +115,21 @@ namespace SigningService.Tests
         {
             var keyVaultAgentMock = new Mock<IKeyVaultAgent>(MockBehavior.Strict);
 
+            string keyId = Any.String(1, 10);
             byte[] expectedSignature = Any.Sequence(i => Any.Byte(), 256).ToArray();
 
+            var keyIdExpr = It.Is<string>(s => !string.IsNullOrEmpty(s));
+            var digestExpr = It.Is<byte[]>(d => d.SequenceEqual(testAssembly.StrongNameSignatureHash));
+
             keyVaultAgentMock
-                .Setup(k => k.Sign(It.Is<byte[]>(d => d.SequenceEqual(testAssembly.StrongNameSignatureHash))))
+                .Setup(k => k.SignAsync(keyIdExpr, digestExpr))
                 .Returns(Task.FromResult(expectedSignature));
+            keyVaultAgentMock
+                .Setup(k => k.GetKeyIdAsync(It.IsAny<PublicKey>()))
+                .Returns(Task.FromResult(keyId));
+            keyVaultAgentMock
+                .Setup(k => k.CanSignAsync(It.IsAny<PublicKey>(), It.IsAny<AssemblyHashAlgorithm>()))
+                .Returns(Task.FromResult(true));
 
             using (Stream outputPeImage = testAssembly.GetWritablePEImage())
             {
@@ -150,34 +140,34 @@ namespace SigningService.Tests
                 strongNameSigner.ExtractStrongNameSignature().Should().BeEquivalentTo(expectedSignature);
             }
 
-            keyVaultAgentMock.Verify(k => k.Sign(It.Is<byte[]>(d => d.SequenceEqual(testAssembly.StrongNameSignatureHash))), Times.Once);
+            keyVaultAgentMock.Verify(k => k.SignAsync(keyIdExpr, digestExpr), Times.Once);
         }
 
         [Fact]
         public async void When_digest_has_more_or_less_than_32_bytes_Then_it_fails_with_a_useful_message()
         {
-            var keyVaultAgent = new KeyVaultAgent();
+            //var keyVaultAgent = new KeyVaultAgent();
 
-            var byteCount = Any.Int(0, 1024);
-            if (byteCount == 32) byteCount += Any.Int(1, 1024);
+            //var byteCount = Any.Int(0, 1024);
+            //if (byteCount == 32) byteCount += Any.Int(1, 1024);
 
-            Action sign = () => { keyVaultAgent.Sign(new byte[byteCount]).Wait(); };
+            //Action sign = () => { keyVaultAgent.SignAsync(new byte[byteCount]).Wait(); };
 
-            sign
-                .ShouldThrow<ArgumentException>("Because only 32 bit digests are accepted by RSA256")
-                .WithMessage("The value must have 32 bytes\r\nParameter name: digest");
+            //sign
+            //    .ShouldThrow<ArgumentException>("Because only 32 bit digests are accepted by RSA256")
+            //    .WithMessage("The value must have 32 bytes\r\nParameter name: digest");
         }
 
         [Fact]
         public async void When_digest_is_null_Then_it_fails_with_a_useful_message()
         {
-            var keyVaultAgent = new KeyVaultAgent();
+            //var keyVaultAgent = new KeyVaultAgent();
             
-            Action sign = () => keyVaultAgent.Sign(null).Wait();
+            //Action sign = () => keyVaultAgent.SignAsync(null).Wait();
 
-            sign
-                .ShouldThrow<ArgumentNullException>("Because a digest must be provided.")
-                .WithMessage("Value cannot be null.\r\nParameter name: digest");
+            //sign
+            //    .ShouldThrow<ArgumentNullException>("Because a digest must be provided.")
+            //    .WithMessage("Value cannot be null.\r\nParameter name: digest");
         }
     }
 }

@@ -24,10 +24,10 @@ namespace SigningService
             return strongNameSigner.TrySignAsync();
         }
 
-        public bool CanSign(Stream peStream)
+        public Task<bool> CanSignAsync(Stream peStream)
         {
             StrongNameSigner strongNameSigner = new StrongNameSigner(_keyVaultAgent, peStream);
-            return strongNameSigner.CanSign();
+            return strongNameSigner.CanSignAsync();
         }
     }
 }

@@ -13,7 +13,9 @@ namespace SigningService.Agents
 {
     public class KeyVaultAgent : IKeyVaultAgent
     {
-        public async Task<byte[]> Sign(byte[] digest)
+        // PublicKey to KeyId mapping
+        private Dictionary<PublicKey, string> _supportedPublicKeysCache = new Dictionary<PublicKey,string>();
+        public async Task<byte[]> SignAsync(string keyId, byte[] digest)
         {
             if (digest == null) throw new ArgumentNullException("digest");
 
@@ -25,7 +27,7 @@ namespace SigningService.Agents
 
             var signResult =
                 await client.SignAsync(
-                        keyVaultSettings.KeyId,
+                        keyId,
                         keyVaultSettings.Algorithm,
                         digest);
 
@@ -34,12 +36,10 @@ namespace SigningService.Agents
             return ret;
         }
 
-        public async Task<IEnumerable<JsonWebKey>> GetKeys()
+        private async Task<IEnumerable<JsonWebKey>> GetKeysAsync()
         {
             var client = new KeyVaultClient(GetAccessToken);
             var keyVaultSettings = Settings.Get<KeyVaultSettings>();
-
-            //Task<JsonWebKey> jsonWebKeyLambda =
 
             var keys = await client.GetKeysAsync(keyVaultSettings.Vault);
 
@@ -72,14 +72,45 @@ namespace SigningService.Agents
             return result.AccessToken;
         }
 
-        public bool CanSign(byte[] publicKey, AssemblyHashAlgorithm hashAlgorithm)
+        public async Task<bool> CanSignAsync(PublicKey publicKey, AssemblyHashAlgorithm hashAlgorithm)
         {
             if (!SupportsHashAlgorithm(hashAlgorithm))
             {
                 return false;
             }
 
-            throw new NotImplementedException();
+            string keyId = await GetKeyIdAsync(publicKey);
+            return keyId != null;
+        }
+
+        public async Task<string> GetKeyIdAsync(PublicKey publicKey)
+        {
+            string kid;
+            if (_supportedPublicKeysCache.TryGetValue(publicKey, out kid))
+            {
+                return kid;
+            }
+            await UpdateCacheAsync();
+
+            if (_supportedPublicKeysCache.TryGetValue(publicKey, out kid))
+            {
+                return kid;
+            }
+
+            return null;
+        }
+
+        private async Task UpdateCacheAsync()
+        {
+            Dictionary<PublicKey, string> supportedPublicKeysCache = new Dictionary<PublicKey,string>();
+
+            IEnumerable<JsonWebKey> keys = await GetKeysAsync();
+            foreach (var key in keys)
+            {
+                supportedPublicKeysCache.Add(new PublicKey(key.E, key.N), key.Kid);
+            }
+
+            _supportedPublicKeysCache = supportedPublicKeysCache;
         }
 
         private bool SupportsHashAlgorithm(AssemblyHashAlgorithm hashAlgorithm)
@@ -87,8 +118,6 @@ namespace SigningService.Agents
             switch (hashAlgorithm)
             {
                 case AssemblyHashAlgorithm.Sha256:
-                case AssemblyHashAlgorithm.Sha384:
-                case AssemblyHashAlgorithm.Sha512:
                     return true;
             }
 

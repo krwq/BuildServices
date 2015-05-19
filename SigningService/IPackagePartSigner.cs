@@ -8,6 +8,6 @@ namespace SigningService
     internal interface IPackagePartSigner
     {
         Task<bool> TrySignAsync(Stream peStream);
-        bool CanSign(Stream peStream);
+        Task<bool> CanSignAsync(Stream peStream);
     }
 }

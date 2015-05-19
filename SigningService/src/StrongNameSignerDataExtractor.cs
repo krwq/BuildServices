@@ -69,21 +69,22 @@ namespace SigningService
 
                 MetadataReader mr = peReader.GetMetadataReader();
                 AssemblyDefinition assemblyDef = mr.GetAssemblyDefinition();
-                PublicKey = mr.GetBlobBytes(assemblyDef.PublicKey);
-                PublicKeyToken = GetPublicKeyToken(PublicKey);
+                PublicKeyBlob = mr.GetBlobBytes(assemblyDef.PublicKey);
+                PublicKey = new PublicKey(PublicKeyBlob);
+                PublicKeyToken = GetPublicKeyToken(PublicKeyBlob);
 
                 // Public Key consists of following field:
                 // - Signature algorithm (4 bytes)
                 // - Hash Algorithm (4 bytes)
                 // - Public Key size (4 bytes)
                 // - public Key (var size)
-                if (PublicKey.Length < 8)
+                if (PublicKeyBlob.Length < 8)
                 {
                     IsValidAssembly = false;
                     ExceptionsHelper.ThrowBadFormatException();
                     return;
                 }
-                fixed (byte* pk = PublicKey)
+                fixed (byte* pk = PublicKeyBlob)
                 {
                     int* hashAlg = (int*)(pk + 4);
                     HashAlgorithm = (AssemblyHashAlgorithm)(*hashAlg);
@@ -301,7 +302,8 @@ namespace SigningService
 
         public List<DataBlock> SpecialHashingBlocks { get; private set; }
 
-        public byte[] PublicKey { get; private set; }
+        public byte[] PublicKeyBlob { get; private set; }
+        public PublicKey PublicKey { get; private set; }
         public string PublicKeyToken { get; private set; }
         public AssemblyHashAlgorithm HashAlgorithm { get; private set; }
     }

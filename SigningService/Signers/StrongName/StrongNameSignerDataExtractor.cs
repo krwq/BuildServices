@@ -105,10 +105,19 @@ namespace SigningService.Signers.StrongName
         private List<DataBlock> GetSpecialHashingBlocks()
         {
             List<DataBlock> specialHashingBlocks = new List<DataBlock>(16);
+
+            specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "PE Headers", 0, PaddingBetweenTheSectionHeadersAndSectionsOffset));
+            int i = 0;
+            foreach (var section in SectionsInfo)
+            {
+                string name = string.Format("Section {0}", i++);
+                specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, name, section.Offset, section.Size));
+            }
+
             specialHashingBlocks.Add(new DataBlock(DataBlockHashing.HashZeros, "Checksum", ChecksumOffset, ChecksumSize));
-            specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "StrongNameSignatureDirectory header", StrongNameSignatureDirectoryHeaderOffset, StrongNameSignatureDirectoryHeaderSize));
+            //specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "StrongNameSignatureDirectory header", StrongNameSignatureDirectoryHeaderOffset, StrongNameSignatureDirectoryHeaderSize));
             specialHashingBlocks.Add(new DataBlock(DataBlockHashing.HashZeros, "CertificateTableDirectory header", CertificateTableDirectoryHeaderOffset, CertificateTableDirectoryHeaderSize));
-            specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Skip, "Padding between directory headers and sections", PaddingBetweenTheSectionHeadersAndSectionsOffset, PaddingBetweenTheSectionHeadersAndSectionsSize));
+            //specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Skip, "Padding between directory headers and sections", PaddingBetweenTheSectionHeadersAndSectionsOffset, PaddingBetweenTheSectionHeadersAndSectionsSize));
 
             if (HasStrongNameSignatureDirectory)
             {
@@ -119,7 +128,7 @@ namespace SigningService.Signers.StrongName
             {
                 // It is not clear what to do with this block. According to ECMA-335 we should skip it which can either mean Skip or HashZeros 
                 // although looking at sn.exe implementation I didn't see they are doing that so leaving it as Hash
-                specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "CertificateTableDirectory", CertificateTableDirectoryOffset, CertificateTableDirectorySize));
+                //specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "CertificateTableDirectory", CertificateTableDirectoryOffset, CertificateTableDirectorySize));
             }
 
             return specialHashingBlocks;

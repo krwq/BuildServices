@@ -177,6 +177,15 @@ namespace SigningService.Signers.StrongName
             }
         }
 
+        public AssemblyHashAlgorithm AssemblyDefinitionPublicKeyHashAlgorithm
+        {
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.HashAlgorithm;
+            }
+        }
+
         public byte[] AssemblySignatureKeyAttributePublicKeyBlob
         {
             get
@@ -192,6 +201,15 @@ namespace SigningService.Signers.StrongName
             {
                 StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
                 return dataExtractor.AssemblySignatureKeyAttributePublicKeyToken;
+            }
+        }
+
+        public AssemblyHashAlgorithm AssemblySignatureKeyAttributePublicKeyHashAlgorithm
+        {
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.AssemblySignatureKeyAttributeHashAlgorithm;
             }
         }
 
@@ -426,7 +444,7 @@ namespace SigningService.Signers.StrongName
             hashAlgorithm.TransformBlock(buffer, 0, buffer.Length, buffer, 0);
         }
 
-        private static byte[] CalculateAssemblyHash(Stream s, HashAlgorithm hashAlgorithm, List<DataBlock> skipBlocks)
+        private static byte[] CalculateAssemblyHashOld(Stream s, HashAlgorithm hashAlgorithm, List<DataBlock> skipBlocks)
         {
             hashAlgorithm.Initialize();
 
@@ -479,6 +497,42 @@ namespace SigningService.Signers.StrongName
             s.Seek(previousEnd, SeekOrigin.Begin);
 
             CalculatePartialHashFromStream(s, hashAlgorithm, bytesLeft);
+
+            byte[] buffer = new byte[1];
+            hashAlgorithm.TransformFinalBlock(buffer, 0, 0);
+            return hashAlgorithm.Hash;
+        }
+
+        private static byte[] CalculateAssemblyHash(Stream s, HashAlgorithm hashAlgorithm, List<DataBlock> skipBlocks)
+        {
+            hashAlgorithm.Initialize();
+
+            for (int i = 0; i < skipBlocks.Count; i++)
+            {
+                switch (skipBlocks[i].Hashing)
+                {
+                    case DataBlockHashing.HashZeros:
+                    {
+                        CalculatePartialHashFromZeros(hashAlgorithm, skipBlocks[i].Size);
+                        break;
+                    }
+                    case DataBlockHashing.Hash:
+                    {
+                        s.Seek(skipBlocks[i].Offset, SeekOrigin.Begin);
+                        CalculatePartialHashFromStream(s, hashAlgorithm,  skipBlocks[i].Size);
+                        break;
+                    }
+                    case DataBlockHashing.Skip:
+                    {
+                        break;
+                    }
+                    default:
+                    {
+                        ExceptionsHelper.ThrowDataBlockHashingValueIsInvalid(skipBlocks[i].Hashing);
+                        return null;
+                    }
+                }
+            }
 
             byte[] buffer = new byte[1];
             hashAlgorithm.TransformFinalBlock(buffer, 0, 0);

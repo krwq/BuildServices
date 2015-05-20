@@ -104,7 +104,8 @@ namespace SigningService.Tests
                 bool result = await strongNameSigner.TrySignAsync();
                 result.Should().BeTrue();
                 output.WriteLine("Signature dir size: {0}", strongNameSigner.ExtractStrongNameSignature().Length);
-                output.WriteLine("Hash Algorithm: {0}", strongNameSigner.HashAlgorithm);
+                output.WriteLine("AD  Hash Algorithm: {0}", strongNameSigner.AssemblyDefinitionPublicKeyHashAlgorithm);
+                output.WriteLine("ASK Hash Algorithm: {0}", strongNameSigner.AssemblySignatureKeyAttributePublicKeyHashAlgorithm);
                 byte[] hash = strongNameSigner.ComputeHash();
                 byte[] expHash = testAssembly.StrongNameSignatureHash;
                 output.WriteLine("Calculated hash size: {0}", hash.Length);

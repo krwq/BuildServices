@@ -48,9 +48,6 @@ namespace SigningService.Signers.StrongName
                 HasCertificateTableDirectory = peReader.PEHeaders.TryGetDirectoryOffset(peReader.PEHeaders.PEHeader.CertificateTableDirectory, out certificateTableDirectoryOffset);
                 if (HasCertificateTableDirectory)
                 {
-                    // It is not clear what to do with this block. According to ECMA-335 we should skip it which can either mean Skip or HashZeros 
-                    // although looking at sn.exe implementation I didn't see they are doing that so leaving it as Hash
-                    Console.WriteLine("This may not work as expected. Please verify this signature is correct. If it is please remove the warning.");
                     CertificateTableDirectoryOffset = certificateTableDirectoryOffset;
                     CertificateTableDirectorySize = peReader.PEHeaders.PEHeader.CertificateTableDirectory.Size;
                 }
@@ -59,7 +56,17 @@ namespace SigningService.Signers.StrongName
                 NumberOfSections = peReader.PEHeaders.CoffHeader.NumberOfSections;
                 if (NumberOfSections > 0)
                 {
+                    List<SectionInfo> sections = new List<SectionInfo>(NumberOfSections);
                     SectionsStartOffset = peReader.PEHeaders.SectionHeaders[0].PointerToRawData;
+                    for (int i = 0; i < NumberOfSections; i++)
+                    {
+                        SectionInfo si = new SectionInfo();
+                        si.Name = peReader.PEHeaders.SectionHeaders[i].Name;
+                        si.Offset = peReader.PEHeaders.SectionHeaders[i].PointerToRawData;
+                        si.Size = peReader.PEHeaders.SectionHeaders[i].SizeOfRawData;
+                        sections.Add(si);
+                    }
+                    SectionsInfo = sections;
                 }
                 else
                 {
@@ -110,6 +117,8 @@ namespace SigningService.Signers.StrongName
 
             if (HasCertificateTableDirectory)
             {
+                // It is not clear what to do with this block. According to ECMA-335 we should skip it which can either mean Skip or HashZeros 
+                // although looking at sn.exe implementation I didn't see they are doing that so leaving it as Hash
                 specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "CertificateTableDirectory", CertificateTableDirectoryOffset, CertificateTableDirectorySize));
             }
 
@@ -183,13 +192,13 @@ namespace SigningService.Signers.StrongName
                                 if (leftBlockSize > 0)
                                 {
                                     // we add left block if size is non zero
-                                    ret.Add(new DataBlock(DataBlockHashing.Hash, prev.Name, prev.Offset, leftBlockSize));
+                                    ret.Add(new DataBlock(prev.Hashing, prev.Name, prev.Offset, leftBlockSize));
                                 }
 
                                 int rightBlockEndOffset = prev.Offset + prev.Size;
                                 int middleBlockEndOffset = blocks[i].Offset + blocks[i].Size;
 
-                                DataBlock rightBlock = new DataBlock(DataBlockHashing.Hash, prev.Name, middleBlockEndOffset, rightBlockEndOffset - middleBlockEndOffset);
+                                DataBlock rightBlock = new DataBlock(prev.Hashing, prev.Name, middleBlockEndOffset, rightBlockEndOffset - middleBlockEndOffset);
                                 if (rightBlock.Size > 0)
                                 {
                                     // we add middle block and right block if right is non-zero
@@ -289,5 +298,7 @@ namespace SigningService.Signers.StrongName
         public PublicKey AssemblySignatureKeyAttributePublicKey { get; private set; }
         public string AssemblySignatureKeyAttributePublicKeyToken { get; private set; }
         public AssemblyHashAlgorithm AssemblySignatureKeyAttributeHashAlgorithm { get; private set; }
+
+        public IEnumerable<SectionInfo> SectionsInfo { get; private set; }
     }
 }

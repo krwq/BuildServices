@@ -131,6 +131,8 @@ namespace SigningService.Signers.StrongName
             EmbedStrongNameSignature(signature);
         }
 
+        internal StrongNameSignerDataExtractor RawData { get { return _dataExtractor.Value; } }
+
         public byte[] ComputeHash()
         {
             using (MemoryStream ms = new MemoryStream())
@@ -154,6 +156,42 @@ namespace SigningService.Signers.StrongName
                 {
                     return dataExtractor.PublicKeyBlob;
                 }
+            }
+        }
+
+        public byte[] AssemblyDefinitionPublicKeyBlob
+        {
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.PublicKeyBlob;
+            }
+        }
+
+        public string AssemblyDefinitionPublicKeyToken
+        {
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.PublicKeyToken;
+            }
+        }
+
+        public byte[] AssemblySignatureKeyAttributePublicKeyBlob
+        {
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob;
+            }
+        }
+
+        public string AssemblySignatureKeyAttributePublicKeyToken
+        {
+            get
+            {
+                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                return dataExtractor.AssemblySignatureKeyAttributePublicKeyToken;
             }
         }
 

@@ -372,6 +372,7 @@
     <Compile Include="Signers\StrongName\MetadataReader\System.Reflection.cs" />
     <Compile Include="Models\PublicKey.cs" />
     <Compile Include="Signers\StrongName\PublicKeyBlobHelper.cs" />
+    <Compile Include="Signers\StrongName\SectionInfo.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerHelper.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerDataExtractor.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerException.cs" />

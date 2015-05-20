@@ -35,6 +35,49 @@ namespace SigningService.Tests
             return sb.ToString();
         }
 
+        private void PrintDataBlocks(IEnumerable<DataBlock> blocks)
+        {
+            foreach (var block in blocks)
+            {
+                string blockInfo = string.Format(
+                    "BLOCK(type: {0}, start: {1}, size: {2}, name: {3})",
+                    block.Hashing, block.Offset, block.Size, block.Name);
+                output.WriteLine(blockInfo);
+            }
+        }
+
+        private static string RemoveSpecialCharactersFromString(string s)
+        {
+            string ret = "";
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if ((int)c >= 32 && (int)c <= 127)
+                {
+                    ret += c;
+                }
+                else
+                {
+                    //name += "&#" + ((int)c).ToString("x") + ";";
+                }
+            }
+
+            return ret;
+        }
+
+        private void PrintAssemblyInfo(StrongNameSignerHelper ssn)
+        {
+            var dataExtractor = ssn.RawData;
+            output.WriteLine("NumberOfSections = {0}", dataExtractor.NumberOfSections);
+            output.WriteLine("SectionsHeadersEndOffset = {0}", dataExtractor.SectionsHeadersEndOffset);
+            output.WriteLine("SectionsStartOffset = {0}", dataExtractor.SectionsStartOffset);
+            foreach (SectionInfo section in dataExtractor.SectionsInfo)
+            {
+                string name = RemoveSpecialCharactersFromString(section.Name);
+                output.WriteLine("SECTION(Name = {0}, Start = {1}, Size = {2})", name, section.Offset, section.Size);
+            }
+        }
+
         [Theory, MemberData("TestAssembliesWithKnownHash")]
         public async void Mock_sign_test(TestAssembly testAssembly)
         {
@@ -68,7 +111,16 @@ namespace SigningService.Tests
                 output.WriteLine("  Expected hash size: {0}", expHash.Length);
                 output.WriteLine("Calculated hash: {0}", ByteArrayToString(hash));
                 output.WriteLine("  Expected hash: {0}", ByteArrayToString(expHash));
-                output.WriteLine("PK: {0}", ByteArrayToString(strongNameSigner.PublicKeyBlob));
+                PrintDataBlocks(strongNameSigner.RawData.SpecialHashingBlocks);
+                PrintAssemblyInfo(strongNameSigner);
+                //output.WriteLine("PK  AD: {0}", ByteArrayToString(strongNameSigner.AssemblyDefinitionPublicKeyBlob));
+                //output.WriteLine("PK  AD Token: {0}", strongNameSigner.AssemblyDefinitionPublicKeyToken);
+                //output.WriteLine("Signature: {0}", ByteArrayToString(strongNameSigner.ExtractStrongNameSignature()));
+                //if (strongNameSigner.AssemblySignatureKeyAttributePublicKeyBlob != null)
+                //{
+                //    output.WriteLine("PK ASK: {0}", ByteArrayToString(strongNameSigner.AssemblySignatureKeyAttributePublicKeyBlob));
+                //    output.WriteLine("PK ASK Token: {0}", strongNameSigner.AssemblySignatureKeyAttributePublicKeyToken);
+                //}
                 strongNameSigner.ComputeHash().Should().BeEquivalentTo(expHash);
                 strongNameSigner.ExtractStrongNameSignature().Should().BeEquivalentTo(expectedSignature);
             }

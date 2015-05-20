@@ -71,24 +71,26 @@ namespace SigningService.Signers.StrongName
                 MetadataReader mr = peReader.GetMetadataReader();
                 AssemblyDefinition assemblyDef = mr.GetAssemblyDefinition();
                 PublicKeyBlob = mr.GetBlobBytes(assemblyDef.PublicKey);
-                PublicKey = PublicKeyHelper.GetPublicKeyFromPublicKeyBlob(PublicKeyBlob);
-                PublicKeyToken = GetPublicKeyToken(PublicKeyBlob);
+                PublicKey = PublicKeyBlobHelper.GetPublicKey(PublicKeyBlob);
+                PublicKeyToken = PublicKeyBlobHelper.GetPublicKeyToken(PublicKeyBlob);
+                HashAlgorithm = PublicKeyBlobHelper.GetHashAlgorithm(PublicKeyBlob);
 
-                // Public Key consists of following field:
-                // - Signature algorithm (4 bytes)
-                // - Hash Algorithm (4 bytes)
-                // - Public Key size (4 bytes)
-                // - public Key (var size)
-                if (PublicKeyBlob.Length < 8)
+                foreach (CustomAttributeHandle cah in mr.GetCustomAttributes(Handle.AssemblyDefinition))
                 {
-                    IsValidAssembly = false;
-                    ExceptionsHelper.ThrowBadFormatException();
-                    return;
-                }
-                fixed (byte* pk = PublicKeyBlob)
-                {
-                    int* hashAlg = (int*)(pk + 4);
-                    HashAlgorithm = (AssemblyHashAlgorithm)(*hashAlg);
+                    CustomAttribute ca = mr.GetCustomAttribute(cah);
+                    string className = CustomAttributeDataExtractor.GetCustomAttributeClassName(mr, ca);
+                    if (className == "System.Reflection.AssemblySignatureKeyAttribute")
+                    {
+                        List<string> args = CustomAttributeDataExtractor.GetFixedStringArguments(mr, ca);
+                        if (args.Count == 2)
+                        {
+                            string publicKey = args[0];
+                            AssemblySignatureKeyAttributePublicKeyBlob = PublicKeyBlobHelper.ByteArrayFromHex(publicKey);
+                            AssemblySignatureKeyAttributePublicKey = PublicKeyBlobHelper.GetPublicKey(AssemblySignatureKeyAttributePublicKeyBlob);
+                            AssemblySignatureKeyAttributeHashAlgorithm = PublicKeyBlobHelper.GetHashAlgorithm(AssemblySignatureKeyAttributePublicKeyBlob);
+                            AssemblySignatureKeyAttributePublicKeyToken = PublicKeyBlobHelper.GetPublicKeyToken(AssemblySignatureKeyAttributePublicKeyBlob);
+                        }
+                    }
                 }
             }
         }
@@ -244,31 +246,6 @@ namespace SigningService.Signers.StrongName
             return ret;
         }
 
-        private static string GetPublicKeyToken(byte[] publicKey)
-        {
-            byte[] ret = new byte[8];
-            HashAlgorithm sha1 = SHA1.Create();
-
-            sha1.TransformFinalBlock(publicKey, 0, publicKey.Length);
-
-            for (int i = 0; i < 8; i++)
-            {
-                ret[i] = sha1.Hash[sha1.Hash.Length - i - 1];
-            }
-            
-            return ByteArrayToString(ret);
-        }
-
-        private static string ByteArrayToString(byte[] t)
-        {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < t.Length; i++)
-            {
-                sb.Append(string.Format("{0:x2}", t[i]));
-            }
-            return sb.ToString();
-        }
-
         private Stream _peStream;
 
         public bool IsValidAssembly { get; private set; }
@@ -307,5 +284,10 @@ namespace SigningService.Signers.StrongName
         public PublicKey PublicKey { get; private set; }
         public string PublicKeyToken { get; private set; }
         public AssemblyHashAlgorithm HashAlgorithm { get; private set; }
+
+        public byte[] AssemblySignatureKeyAttributePublicKeyBlob { get; private set; }
+        public PublicKey AssemblySignatureKeyAttributePublicKey { get; private set; }
+        public string AssemblySignatureKeyAttributePublicKeyToken { get; private set; }
+        public AssemblyHashAlgorithm AssemblySignatureKeyAttributeHashAlgorithm { get; private set; }
     }
 }

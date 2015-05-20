@@ -243,6 +243,7 @@
     <Compile Include="Services\ExceptionHandling\TraceExceptionLogger.cs" />
     <Compile Include="Agents\SignAgent.cs" />
     <Compile Include="Extensions\ByteArrayHelpers.cs" />
+    <Compile Include="Signers\StrongName\CustomAttributeDataExtractor.cs" />
     <Compile Include="Signers\StrongName\DataBlock.cs" />
     <Compile Include="Signers\StrongName\DataBlockHashing.cs" />
     <Compile Include="Signers\StrongName\ExceptionsHelper.cs" />
@@ -370,7 +371,7 @@
     <Compile Include="Signers\StrongName\MetadataReader\PortableExecutable\SectionHeader.cs" />
     <Compile Include="Signers\StrongName\MetadataReader\System.Reflection.cs" />
     <Compile Include="Models\PublicKey.cs" />
-    <Compile Include="Signers\StrongName\PublicKeyHelper.cs" />
+    <Compile Include="Signers\StrongName\PublicKeyBlobHelper.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerHelper.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerDataExtractor.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerException.cs" />

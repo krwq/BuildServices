@@ -4,7 +4,7 @@ namespace SigningService.Signers.StrongName
 {
     internal struct DataBlock : IComparable<DataBlock>
     {
-        public DataBlock(DataBlockHashing hashing, string name, int offset, int size)
+        public DataBlock(DataBlockHashing hashing, string name, int offset, int size) : this()
         {
             Hashing = hashing;
             Name = name;
@@ -12,10 +12,10 @@ namespace SigningService.Signers.StrongName
             Size = size;
         }
 
-        public DataBlockHashing Hashing;
-        public string Name;
-        public int Offset;
-        public int Size;
+        public DataBlockHashing Hashing { get; set; }
+        public string Name { get; set; }
+        public int Offset { get; set; }
+        public int Size { get; set; }
 
         public int CompareTo(DataBlock other)
         {

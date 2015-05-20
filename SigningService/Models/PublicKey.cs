@@ -22,9 +22,9 @@ namespace SigningService.Models
                 throw new ArgumentNullException("modulus");
             }
 
-            if (modulus.Length > 4)
+            if (exponent.Length > 4)
             {
-                throw new ArgumentException("modulus Length should be less or equal to 4.");
+                throw new ArgumentException("exponent Length should be less or equal to 4.");
             }
 
             Exponent = new byte[4];
@@ -48,6 +48,8 @@ namespace SigningService.Models
             return Exponent.IsEquivalentTo(other.Exponent) && Modulus.IsEquivalentTo(other.Modulus);
         }
 
+        // First and last two characters of modulus
+        // are enough to uniquely identify public key
         public override int GetHashCode()
         {
             if (Modulus == null)

@@ -19,6 +19,8 @@ namespace SigningService.Signers.StrongName
         private Stream _peStream;
         private Lazy<StrongNameSignerDataExtractor> _dataExtractor;
         private bool _strongNameSignedBitSet = false;
+        private bool _strongNameSignedBitOverwritten = false;
+
         public StrongNameSignerHelper(IKeyVaultAgent keyVaultAgent, Stream peStream)
         {
             _keyVaultAgent = keyVaultAgent;
@@ -57,8 +59,13 @@ namespace SigningService.Signers.StrongName
         public bool HasStrongNameSignature()
         {
             StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-            bool hasStrongNameSignedBit = _strongNameSignedBitSet | dataExtractor.HasStrongNameSignedFlag;
-            return hasStrongNameSignedBit && dataExtractor.HasStrongNameSignatureDirectory;
+
+            if (!dataExtractor.HasStrongNameSignatureDirectory)
+            {
+                return false;
+            }
+
+            return _strongNameSignedBitOverwritten ? _strongNameSignedBitSet : dataExtractor.HasStrongNameSignedFlag;
         }
 
         public async Task<bool> CanSignAsync()
@@ -67,8 +74,7 @@ namespace SigningService.Signers.StrongName
 
             bool ret = _peStream.CanWrite && _peStream.CanSeek && _peStream.CanRead;
             ret &= dataExtractor.IsValidAssembly;
-            ret &= !dataExtractor.HasStrongNameSignedFlag;
-            ret &= dataExtractor.HasStrongNameSignatureDirectory;
+            ret &= !HasStrongNameSignature();
             ret &= _hashAlgorithm != null;
             ret &= SupportsHashAlgorithm(HashAlgorithm);
             //int hashSize = _hashAlgorithm.HashSize;
@@ -118,6 +124,13 @@ namespace SigningService.Signers.StrongName
             _peStream.Write(signature, 0, signature.Length);
         }
 
+        public void EmbedEmptyStrongNameSignature()
+        {
+            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            byte[] signature = new byte[dataExtractor.StrongNameSignatureDirectorySize];
+            EmbedStrongNameSignature(signature);
+        }
+
         public byte[] ComputeHash()
         {
             using (MemoryStream ms = new MemoryStream())
@@ -133,7 +146,14 @@ namespace SigningService.Signers.StrongName
             get
             {
                 StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.PublicKeyBlob;
+                if (dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob != null)
+                {
+                    return dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob;
+                }
+                else
+                {
+                    return dataExtractor.PublicKeyBlob;
+                }
             }
         }
 
@@ -142,7 +162,14 @@ namespace SigningService.Signers.StrongName
             get
             {
                 StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.PublicKey;
+                if (dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob != null)
+                {
+                    return dataExtractor.AssemblySignatureKeyAttributePublicKey;
+                }
+                else
+                {
+                    return dataExtractor.PublicKey;
+                }
             }
         }
 
@@ -151,7 +178,14 @@ namespace SigningService.Signers.StrongName
             get
             {
                 StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.PublicKeyToken;
+                if (dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob != null)
+                {
+                    return dataExtractor.AssemblySignatureKeyAttributePublicKeyToken;
+                }
+                else
+                {
+                    return dataExtractor.PublicKeyToken;
+                }
             }
         }
 
@@ -160,7 +194,14 @@ namespace SigningService.Signers.StrongName
             get
             {
                 StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.HashAlgorithm;
+                if (dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob != null)
+                {
+                    return dataExtractor.AssemblySignatureKeyAttributeHashAlgorithm;
+                }
+                else
+                {
+                    return dataExtractor.HashAlgorithm;
+                }
             }
         }
 
@@ -168,11 +209,27 @@ namespace SigningService.Signers.StrongName
         {
             switch (hashAlgorithm)
             {
+                case AssemblyHashAlgorithm.Sha1:
                 case AssemblyHashAlgorithm.Sha256:
+                case AssemblyHashAlgorithm.Sha384:
+                case AssemblyHashAlgorithm.Sha512:
                     return true;
             }
 
             return false;
+        }
+
+        public void RemoveSignature()
+        {
+            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            if (!HasStrongNameSignature())
+            {
+                // nothing to do
+                return;
+            }
+
+            SetStrongNameSignedFlag(false);
+            EmbedEmptyStrongNameSignature();
         }
 
         private HashAlgorithm CreateHashAlgorithm()
@@ -253,7 +310,7 @@ namespace SigningService.Signers.StrongName
             EraseChecksum(_peStream);
         }
 
-        public void SetStrongNameSignedFlag(Stream writablePEStream)
+        public void SetStrongNameSignedFlag(Stream writablePEStream, bool value = true)
         {
             StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
 
@@ -266,16 +323,26 @@ namespace SigningService.Signers.StrongName
             using (BinaryWriter bw = new BinaryWriter(writablePEStream, Encoding.ASCII, leaveOpen : true))
             {
                 bw.Seek(dataExtractor.CorFlagsOffset, SeekOrigin.Begin);
-                bw.Write((UInt32)(dataExtractor.CorFlagsValue | CorFlags.StrongNameSigned));
+                CorFlags corFlags = dataExtractor.CorFlagsValue;
+                if (value)
+                {
+                    corFlags |= CorFlags.StrongNameSigned;
+                }
+                else
+                {
+                    corFlags &= ~(CorFlags.StrongNameSigned);
+                }
+                bw.Write((UInt32)(corFlags));
             }
 
             if (writablePEStream == _peStream)
             {
-                _strongNameSignedBitSet = true;
+                _strongNameSignedBitSet = value;
+                _strongNameSignedBitOverwritten = true;
             }
         }
 
-        public void SetStrongNameSignedFlag()
+        public void SetStrongNameSignedFlag(bool value = true)
         {
             StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
 
@@ -285,7 +352,7 @@ namespace SigningService.Signers.StrongName
                 return;
             }
 
-            SetStrongNameSignedFlag(_peStream);
+            SetStrongNameSignedFlag(_peStream, value);
         }
 
         private StrongNameSignerDataExtractor ExtractData()

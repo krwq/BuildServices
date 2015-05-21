@@ -1,5 +1,5 @@
-﻿using System;
-using SigningService.Extensions;
+﻿using SigningService.Extensions;
+using System;
 
 namespace SigningService.Signers.StrongName
 {

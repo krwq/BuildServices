@@ -1,106 +1,117 @@
-﻿using SigningService.Models;
-using System.Reflection;
-using SigningService.Extensions;
+﻿using SigningService.Extensions;
+using SigningService.Models;
 using System;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace SigningService.Signers.StrongName
 {
     // Public Key Blob should looks as following:
-    // [Optional] 12 bytes header:
+    // 12 bytes header:
     //      - Signature Algorithm Id (4 bytes)
     //      - Hash Algorithm Id (4 bytes)
-    //      - Signature Size (4 bytes)
-    // Prefix (4 bytes)
-    // Signature Algorithm Id (4 bytes)
-    // "RSA1" (4 bytes)
-    // Modulus size in bits (4 bytes)
-    // Exponent (4 bytes)
-    // Modulus bytes (var size)
+    //      - Public Key Struct Size (4 bytes)
+    //
+    // Public Key struct
+    //      - Prefix (4 bytes) -> (1b - type, 1b - version, 2b - reserved)
+    //      - Signature Algorithm Id (4 bytes)
+    //      - "RSA1" (4 bytes)
+    //      - Modulus size in bits (4 bytes)
+    //      - Exponent (4 bytes)
+    //      - Modulus bytes (var size)
     internal class PublicKeyBlob
     {
-        private static readonly byte[] Prefix = new byte[] { 0x06, 0x02, 0x00, 0x00 };
-        private static readonly byte[] RSA1 = new byte[] { (byte)'R', (byte)'S', (byte)'A', (byte)'1' };
+        private struct PublicKeyBlobLayout
+        {
+            public const byte TypePublicKeyBlob = 0x06;
+            public const UInt32 Rsa1 = 0x31415352;
+            public const int HeaderSize = 12;
+            public const int StructSizeMinusModulusSize = 32;
+
+            public PublicKeyBlobLayout(byte[] publicKeyBlob) : this()
+            {
+                using (MemoryStream ms = new MemoryStream(publicKeyBlob))
+                {
+                    BinaryReader binaryReader = new BinaryReader(ms);
+
+                    AlgId = binaryReader.ReadUInt32();
+                    HashAlgorithm = (AssemblyHashAlgorithm)binaryReader.ReadUInt32();
+                    PublicKeyStructSize = binaryReader.ReadUInt32();
+
+                    Type = binaryReader.ReadByte();
+                    Version = binaryReader.ReadByte();
+                    Reserved = binaryReader.ReadUInt16();
+                    KeyAlg = binaryReader.ReadUInt32();
+                    Magic = binaryReader.ReadUInt32();
+                    ModulusBitLength = binaryReader.ReadInt32();
+                    PublicExponent = binaryReader.ReadBytes(4);
+                    Modulus = binaryReader.ReadBytes(ModulusBitLength / 8);
+                    Modulus.ReverseInplace();
+                }
+            }
+
+            // header
+            public UInt32 AlgId;
+            public AssemblyHashAlgorithm HashAlgorithm;
+            public UInt32 PublicKeyStructSize;
+
+#region PUBLICKEYBLOB https://msdn.microsoft.com/en-us/library/windows/desktop/aa375601%28v=vs.85%29.aspx
+#region PUBLICKEYSTRUC https://msdn.microsoft.com/en-us/library/windows/desktop/aa387453%28v=vs.85%29.aspx
+            // blob header
+            public byte Type;
+            public byte Version;
+            public UInt16 Reserved;
+            public UInt32 KeyAlg;
+#endregion
+
+#region RSAPUBKEY https://msdn.microsoft.com/en-us/library/windows/desktop/aa387685%28v=vs.85%29.aspx
+            // RSA Public Key
+            public UInt32 Magic;
+            public Int32 ModulusBitLength;
+            public byte[] PublicExponent;
+#endregion
+
+            public byte[] Modulus;
+#endregion
+        }
+
+        private PublicKeyBlobLayout data;
 
         public PublicKeyBlob(byte[] publicKeyBlob)
         {
+            data = new PublicKeyBlobLayout(publicKeyBlob);
+
+            if (data.Type != PublicKeyBlobLayout.TypePublicKeyBlob)
+            {
+                ExceptionsHelper.ThrowBadImageFormatException("Expected public key blob!");
+            }
+
+            if (data.Magic != PublicKeyBlobLayout.Rsa1)
+            {
+                ExceptionsHelper.ThrowBadImageFormatException("Only RSA1 is supported!");
+            }
+
+            if ((PublicKeyBlobLayout.HeaderSize + data.PublicKeyStructSize != publicKeyBlob.Length)
+                || (PublicKeyBlobLayout.StructSizeMinusModulusSize + data.Modulus.Length != publicKeyBlob.Length))
+            {
+                ExceptionsHelper.ThrowBadImageFormatException("Invalid size of public key blob!");
+            }
+
             Blob = publicKeyBlob;
-            _publicKey = new Lazy<PublicKey>(GetPublicKey);
+            PublicKey = new PublicKey(data.PublicExponent, data.Modulus);
             _publicKeyToken = new Lazy<string>(GetPublicKeyToken);
-            _hashAlgorithm = new Lazy<AssemblyHashAlgorithm>(GetHashAlgorithm);
         }
 
         public PublicKeyBlob(string publicKeyBlobHex)
             : this(ByteArrayExt.FromHex(publicKeyBlobHex)) { }
 
-        private Lazy<PublicKey> _publicKey;
         private Lazy<string> _publicKeyToken;
-        private Lazy<AssemblyHashAlgorithm> _hashAlgorithm;
-
         public byte[] Blob { get; private set; }
-        public PublicKey PublicKey { get { return _publicKey.Value; } }
+        public PublicKey PublicKey { get; private set; }
         public string PublicKeyToken { get { return _publicKeyToken.Value; } }
-        public AssemblyHashAlgorithm HashAlgorithm { get { return _hashAlgorithm.Value; } }
-
-        private PublicKey GetPublicKey()
-        {
-            // Searching for prefix
-            int offset = 0;
-            if (!Blob.ContainsSubarray(offset, Prefix))
-            {
-                // We probably found optional header
-                offset += 12;
-                if (!Blob.ContainsSubarray(offset, Prefix))
-                {
-                    ExceptionsHelper.ThrowBadFormatException();
-                    return null;
-                }
-            }
-
-            // Searching for RSA1 bytes
-            offset += 8;
-            if (!Blob.ContainsSubarray(offset, RSA1))
-            {
-                ExceptionsHelper.ThrowBadFormatException();
-                return null;
-            }
-
-            offset += 4;
-            UInt32 modulusSize = ReadUInt32AtOffset(Blob, offset);
-            modulusSize /= 8;
-
-            offset += 4;
-            byte[] exponent = new byte[4];
-            Array.Copy(Blob, offset, exponent, 0, 4);
-
-            offset += 4;
-            if (Blob.Length != offset + modulusSize)
-            {
-                ExceptionsHelper.ThrowBadFormatException();
-                return null;
-            }
-
-            byte[] modulus = new byte[modulusSize];
-            Array.Copy(Blob, offset, modulus, 0, modulusSize);
-            modulus.ReverseInplace();
-
-            return new PublicKey(exponent, modulus);
-        }
-
-
-        private unsafe AssemblyHashAlgorithm GetHashAlgorithm()
-        {
-            if (Blob.Length < 8)
-            {
-                ExceptionsHelper.ThrowBadFormatException();
-                return default(AssemblyHashAlgorithm);
-            }
-            fixed (byte* pk = Blob)
-            {
-                int* hashAlg = (int*)(pk + 4);
-                return (AssemblyHashAlgorithm)(*hashAlg);
-            }
-        }
+        public AssemblyHashAlgorithm HashAlgorithm { get { return data.HashAlgorithm; } }
 
         private string GetPublicKeyToken()
         {
@@ -115,28 +126,6 @@ namespace SigningService.Signers.StrongName
             }
             
             return ret.ToHex();
-        }
-
-        private static UInt32 ReadUInt32AtOffset(byte[] bytes, int offset, int size = 4)
-        {
-            if (size < 0 || size > 4 || offset < 0)
-            {
-                ExceptionsHelper.ThrowBadFormatException();
-                return 0xFFFFFFFF;
-            }
-
-            if (offset + size > bytes.Length)
-            {
-                ExceptionsHelper.ThrowBadFormatException();
-                return 0xFFFFFFFF;
-            }
-
-            UInt32 ret = 0;
-            for (int i = 0; i < size; i++)
-            {
-                ret += (UInt32)(bytes[offset + i]) << (i * 8);
-            }
-            return ret;
         }
     }
 }

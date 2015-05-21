@@ -111,11 +111,7 @@ namespace SigningService.Signers.StrongName
                 return;
             }
 
-            if (!_peStream.CanWrite)
-            {
-                ExceptionsHelper.ThrowCannotWriteToStream();
-                return;
-            }
+            ExceptionsHelper.ThrowIfStreamNotWritable(_peStream);
 
             _peStream.Seek(dataExtractor.StrongNameSignatureDirectoryOffset, SeekOrigin.Begin);
             _peStream.Write(signature, 0, signature.Length);
@@ -216,11 +212,7 @@ namespace SigningService.Signers.StrongName
 
         private byte[] PrepareForSigningAndComputeHash(Stream writablePEStream)
         {
-            if (!writablePEStream.CanWrite)
-            {
-                ExceptionsHelper.ThrowCannotWriteToStream();
-                return null;
-            }
+            ExceptionsHelper.ThrowIfStreamNotWritable(writablePEStream);
 
             PrepareForSigning(writablePEStream);
             return HashingHelpers.CalculateAssemblyHash(writablePEStream, _hashAlgorithm.Value, _dataExtractor.Value.HashingBlocks);
@@ -260,13 +252,9 @@ namespace SigningService.Signers.StrongName
 
         private void EraseChecksum(Stream writablePEStream)
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            ExceptionsHelper.ThrowIfStreamNotWritable(writablePEStream);
 
-            if (!writablePEStream.CanWrite)
-            {
-                ExceptionsHelper.ThrowCannotWriteToStream();
-                return;
-            }
+            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
 
             // 0-initialized byte array
             byte[] newChecksum = new byte[dataExtractor.ChecksumSize];
@@ -279,15 +267,11 @@ namespace SigningService.Signers.StrongName
             EraseChecksum(_peStream);
         }
 
-        public void SetStrongNameSignedFlag(Stream writablePEStream, bool value = true)
+        private void SetStrongNameSignedFlag(Stream writablePEStream, bool value = true)
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            ExceptionsHelper.ThrowIfStreamNotWritable(writablePEStream);
 
-            if (!writablePEStream.CanWrite)
-            {
-                ExceptionsHelper.ThrowCannotWriteToStream();
-                return;
-            }
+            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
 
             using (BinaryWriter bw = new BinaryWriter(writablePEStream, Encoding.ASCII, leaveOpen : true))
             {
@@ -313,14 +297,6 @@ namespace SigningService.Signers.StrongName
 
         public void SetStrongNameSignedFlag(bool value = true)
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-
-            if (!_peStream.CanWrite)
-            {
-                ExceptionsHelper.ThrowCannotWriteToStream();
-                return;
-            }
-
             SetStrongNameSignedFlag(_peStream, value);
         }
 

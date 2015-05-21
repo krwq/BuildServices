@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
-using System.Web;
 
 namespace SigningService.Signers.StrongName
 {
@@ -48,7 +45,7 @@ namespace SigningService.Signers.StrongName
                     }
                     default:
                     {
-                        ExceptionsHelper.ThrowDataBlockHashingValueIsInvalid(hashingBlocks[i].Hashing);
+                        ExceptionsHelper.ThrowArgumentOutOfRange("hashingBlocks");
                         return null;
                     }
                 }

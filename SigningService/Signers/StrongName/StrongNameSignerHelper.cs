@@ -139,20 +139,20 @@ namespace SigningService.Signers.StrongName
             get
             {
                 AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
-                if (dataExtractor.AssemblySignatureKeyPublicKey != null)
+                if (dataExtractor.AssemblySignatureKeyAttributePublicKey != null)
                 {
-                    return dataExtractor.AssemblySignatureKeyPublicKey;
+                    return dataExtractor.AssemblySignatureKeyAttributePublicKey;
                 }
                 else
                 {
-                    return dataExtractor.PublicKeyBlob;
+                    return dataExtractor.AssemblyDefinitionPublicKeyBlob;
                 }
             }
         }
 
-        public PublicKeyBlob AssemblyDefinitionPublicKeyBlob { get { return _dataExtractor.Value.PublicKeyBlob; } }
+        public PublicKeyBlob AssemblyDefinitionPublicKeyBlob { get { return _dataExtractor.Value.AssemblyDefinitionPublicKeyBlob; } }
 
-        public PublicKeyBlob AssemblySignatureKeyPublicKeyBlob { get { return _dataExtractor.Value.AssemblySignatureKeyPublicKey; } }
+        public PublicKeyBlob AssemblySignatureKeyPublicKeyBlob { get { return _dataExtractor.Value.AssemblySignatureKeyAttributePublicKey; } }
 
         public static bool SupportsHashAlgorithm(AssemblyHashAlgorithm hashAlgorithm)
         {

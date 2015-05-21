@@ -51,9 +51,9 @@ namespace SigningService.Signers.StrongName
         public List<SectionInfo> SectionsInfo { get; private set; }
         public int PaddingBetweenTheSectionHeadersAndSectionsOffset { get { return SectionsHeadersEndOffset; } }
 
-        public PublicKeyBlob PublicKeyBlob { get; private set; }
-        public PublicKeyBlob AssemblySignatureKeyPublicKey { get; private set; }
-        public byte[] AssemblySignatureKeyCounterSignature { get; private set; }
+        public PublicKeyBlob AssemblyDefinitionPublicKeyBlob { get; private set; }
+        public PublicKeyBlob AssemblySignatureKeyAttributePublicKey { get; private set; }
+        public byte[] AssemblySignatureKeyAttributeCounterSignature { get; private set; }
 
         /// <summary>
         /// Extracts metadata from assembly
@@ -107,7 +107,7 @@ namespace SigningService.Signers.StrongName
 
                 MetadataReader mr = peReader.GetMetadataReader();
                 AssemblyDefinition assemblyDef = mr.GetAssemblyDefinition();
-                PublicKeyBlob = new PublicKeyBlob(mr.GetBlobBytes(assemblyDef.PublicKey));
+                AssemblyDefinitionPublicKeyBlob = new PublicKeyBlob(mr.GetBlobBytes(assemblyDef.PublicKey));
 
                 foreach (CustomAttributeHandle cah in mr.GetCustomAttributes(Handle.AssemblyDefinition))
                 {
@@ -118,8 +118,8 @@ namespace SigningService.Signers.StrongName
                         List<string> args = CustomAttributeDataExtractor.GetFixedStringArguments(mr, ca);
                         if (args.Count == 2)
                         {
-                            AssemblySignatureKeyPublicKey = new PublicKeyBlob(args[0]);
-                            AssemblySignatureKeyCounterSignature = ByteArrayExt.FromHex(args[1]);
+                            AssemblySignatureKeyAttributePublicKey = new PublicKeyBlob(args[0]);
+                            AssemblySignatureKeyAttributeCounterSignature = ByteArrayExt.FromHex(args[1]);
                         }
                     }
                 }

@@ -1,6 +1,8 @@
-﻿namespace SigningService.Extensions
+﻿using System;
+using System.Text;
+namespace SigningService.Extensions
 {
-    internal static class ByteArrayHelpers
+    internal static class ByteArrayExt
     {
         public static bool ContainsSubarray(this byte[] array, int atOffset, byte[] subArray)
         {
@@ -60,6 +62,29 @@
             }
 
             return true;
+        }
+
+        public static string ToHex(this byte[] t)
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < t.Length; i++)
+            {
+                sb.Append(string.Format("{0:x2}", t[i]));
+            }
+            return sb.ToString();
+        }
+
+        // Dummy implementation
+        // No need for anything faster
+        public static byte[] FromHex(string hex)
+        {
+            byte[] ret = new byte[hex.Length / 2];
+            for (int i = 0, j = 0; i < ret.Length; i++, j += 2)
+            {
+                string hexByte = hex.Substring(j, 2);
+                ret[i] = Convert.ToByte(hexByte, 16);
+            }
+            return ret;
         }
     }
 }

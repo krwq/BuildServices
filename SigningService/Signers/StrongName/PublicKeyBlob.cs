@@ -1,37 +1,56 @@
-﻿using SigningService.Extensions;
-using SigningService.Models;
-using System;
+﻿using SigningService.Models;
 using System.Reflection;
+using SigningService.Extensions;
+using System;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace SigningService.Signers.StrongName
 {
-    internal static class PublicKeyBlobHelper
+    // Public Key Blob should looks as following:
+    // [Optional] 12 bytes header:
+    //      - Signature Algorithm Id (4 bytes)
+    //      - Hash Algorithm Id (4 bytes)
+    //      - Signature Size (4 bytes)
+    // Prefix (4 bytes)
+    // Signature Algorithm Id (4 bytes)
+    // "RSA1" (4 bytes)
+    // Modulus size in bits (4 bytes)
+    // Exponent (4 bytes)
+    // Modulus bytes (var size)
+    internal class PublicKeyBlob
     {
         private static readonly byte[] Prefix = new byte[] { 0x06, 0x02, 0x00, 0x00 };
         private static readonly byte[] RSA1 = new byte[] { (byte)'R', (byte)'S', (byte)'A', (byte)'1' };
 
-        // Public Key Blob should looks as following:
-        // [Optional] 12 bytes header:
-        //      - Signature Algorithm Id (4 bytes)
-        //      - Hash Algorithm Id (4 bytes)
-        //      - Signature Size (4 bytes)
-        // Prefix (4 bytes)
-        // Signature Algorithm Id (4 bytes)
-        // "RSA1" (4 bytes)
-        // Modulus size in bits (4 bytes)
-        // Exponent (4 bytes)
-        // Modulus bytes (var size)
-        public static PublicKey GetPublicKey(byte[] publicKeyBlob)
+        public PublicKeyBlob(byte[] publicKeyBlob)
+        {
+            Blob = publicKeyBlob;
+            _publicKey = new Lazy<PublicKey>(GetPublicKey);
+            _publicKeyToken = new Lazy<string>(GetPublicKeyToken);
+            _hashAlgorithm = new Lazy<AssemblyHashAlgorithm>(GetHashAlgorithm);
+        }
+
+        public PublicKeyBlob(string publicKeyBlobHex)
+            : this(ByteArrayExt.FromHex(publicKeyBlobHex)) { }
+
+        private Lazy<PublicKey> _publicKey;
+        private Lazy<string> _publicKeyToken;
+        private Lazy<AssemblyHashAlgorithm> _hashAlgorithm;
+
+        public byte[] Blob { get; private set; }
+        public PublicKey PublicKey { get { return _publicKey.Value; } }
+        public string PublicKeyToken { get { return _publicKeyToken.Value; } }
+        public AssemblyHashAlgorithm HashAlgorithm { get { return _hashAlgorithm.Value; } }
+
+        private PublicKey GetPublicKey()
         {
             // Searching for prefix
             int offset = 0;
-            if (!publicKeyBlob.ContainsSubarray(offset, Prefix))
+            if (!Blob.ContainsSubarray(offset, Prefix))
             {
                 // We probably found optional header
                 offset += 12;
-                if (!publicKeyBlob.ContainsSubarray(offset, Prefix))
+                if (!Blob.ContainsSubarray(offset, Prefix))
                 {
                     ExceptionsHelper.ThrowBadFormatException();
                     return null;
@@ -40,62 +59,62 @@ namespace SigningService.Signers.StrongName
 
             // Searching for RSA1 bytes
             offset += 8;
-            if (!publicKeyBlob.ContainsSubarray(offset, RSA1))
+            if (!Blob.ContainsSubarray(offset, RSA1))
             {
                 ExceptionsHelper.ThrowBadFormatException();
                 return null;
             }
 
             offset += 4;
-            UInt32 modulusSize = ReadUInt32AtOffset(publicKeyBlob, offset);
+            UInt32 modulusSize = ReadUInt32AtOffset(Blob, offset);
             modulusSize /= 8;
 
             offset += 4;
             byte[] exponent = new byte[4];
-            Array.Copy(publicKeyBlob, offset, exponent, 0, 4);
+            Array.Copy(Blob, offset, exponent, 0, 4);
 
             offset += 4;
-            if (publicKeyBlob.Length != offset + modulusSize)
+            if (Blob.Length != offset + modulusSize)
             {
                 ExceptionsHelper.ThrowBadFormatException();
                 return null;
             }
 
             byte[] modulus = new byte[modulusSize];
-            Array.Copy(publicKeyBlob, offset, modulus, 0, modulusSize);
+            Array.Copy(Blob, offset, modulus, 0, modulusSize);
             modulus.ReverseInplace();
 
             return new PublicKey(exponent, modulus);
         }
 
 
-        public unsafe static AssemblyHashAlgorithm GetHashAlgorithm(byte[] publicKeyBlob)
+        private unsafe AssemblyHashAlgorithm GetHashAlgorithm()
         {
-            if (publicKeyBlob.Length < 8)
+            if (Blob.Length < 8)
             {
                 ExceptionsHelper.ThrowBadFormatException();
                 return default(AssemblyHashAlgorithm);
             }
-            fixed (byte* pk = publicKeyBlob)
+            fixed (byte* pk = Blob)
             {
                 int* hashAlg = (int*)(pk + 4);
                 return (AssemblyHashAlgorithm)(*hashAlg);
             }
         }
 
-        public static string GetPublicKeyToken(byte[] publicKeyBlob)
+        private string GetPublicKeyToken()
         {
             byte[] ret = new byte[8];
             HashAlgorithm sha1 = SHA1.Create();
 
-            sha1.TransformFinalBlock(publicKeyBlob, 0, publicKeyBlob.Length);
+            sha1.TransformFinalBlock(Blob, 0, Blob.Length);
 
             for (int i = 0; i < 8; i++)
             {
                 ret[i] = sha1.Hash[sha1.Hash.Length - i - 1];
             }
             
-            return ByteArrayToHex(ret);
+            return ret.ToHex();
         }
 
         private static UInt32 ReadUInt32AtOffset(byte[] bytes, int offset, int size = 4)
@@ -118,29 +137,6 @@ namespace SigningService.Signers.StrongName
                 ret += (UInt32)(bytes[offset + i]) << (i * 8);
             }
             return ret;
-        }
-
-        // Dummy implementation
-        // No need for anything faster
-        public static byte[] ByteArrayFromHex(string hex)
-        {
-            byte[] ret = new byte[hex.Length / 2];
-            for (int i = 0, j = 0; i < ret.Length; i++, j += 2)
-            {
-                string hexByte = hex.Substring(j, 2);
-                ret[i] = Convert.ToByte(hexByte, 16);
-            }
-            return ret;
-        }
-
-        public static string ByteArrayToHex(byte[] t)
-        {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < t.Length; i++)
-            {
-                sb.Append(string.Format("{0:x2}", t[i]));
-            }
-            return sb.ToString();
         }
     }
 }

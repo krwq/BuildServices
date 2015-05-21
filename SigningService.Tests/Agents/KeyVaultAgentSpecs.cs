@@ -16,6 +16,7 @@ using Xunit.Abstractions;
 using Microsoft.Azure.KeyVault.WebKey;
 using System.Security.Cryptography.X509Certificates;
 using System.Reflection;
+using SigningService.Extensions;
 using SigningService.Signers.StrongName;
 using SigningService.Tests.Utils;
 
@@ -30,26 +31,16 @@ namespace SigningService.Tests
             this.output = output;
         }
 
-        public string ByteArrayToString(byte[] t)
-        {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < t.Length; i++)
-            {
-                sb.Append(string.Format("{0:x2}", t[i]));
-            }
-            return sb.ToString();
-        }
-
         public async Task PrintMetadata(IKeyVaultAgent keyVault, Stream peImage)
         {
             StrongNameSignerHelper sns = new StrongNameSignerHelper(keyVault, peImage);
 
             sns.SetStrongNameSignedFlag();
             output.WriteLine("SNS dir size = {0}", sns.ExtractStrongNameSignature().Length);
-            output.WriteLine("HashAlgorithm = {0}", sns.HashAlgorithm);
-            output.WriteLine("Public Key Token = {0}", sns.PublicKeyToken);
-            output.WriteLine("Public Key Modulus = {0}", ByteArrayToString(sns.PublicKey.Modulus));
-            output.WriteLine("Public Key Exponent = {0}", sns.PublicKey.Exponent);
+            output.WriteLine("HashAlgorithm = {0}", sns.PublicKeyBlob.HashAlgorithm);
+            output.WriteLine("Public Key Token = {0}", sns.PublicKeyBlob.PublicKeyToken);
+            output.WriteLine("Public Key Modulus = {0}", sns.PublicKeyBlob.PublicKey.Modulus.ToHex());
+            output.WriteLine("Public Key Exponent = {0}", sns.PublicKeyBlob.PublicKey.Exponent.ToHex());
             string keyId = await sns.GetKeyVaultKeyId();
             output.WriteLine("KeyVault storing key = {0}", keyId != null ? keyId : "<None>");
 
@@ -74,7 +65,7 @@ namespace SigningService.Tests
         }
 
         [Fact]
-        public async void When_digest_has_more_or_less_than_32_bytes_Then_it_fails_with_a_useful_message()
+        public void When_digest_has_more_or_less_than_32_bytes_Then_it_fails_with_a_useful_message()
         {
             //var keyVaultAgent = new KeyVaultAgent();
 
@@ -89,7 +80,7 @@ namespace SigningService.Tests
         }
 
         [Fact]
-        public async void When_digest_is_null_Then_it_fails_with_a_useful_message()
+        public void When_digest_is_null_Then_it_fails_with_a_useful_message()
         {
             //var keyVaultAgent = new KeyVaultAgent();
             

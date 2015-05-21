@@ -1,5 +1,6 @@
 ﻿using SigningService.Agents;
 using SigningService.Models;
+using SigningService.Extensions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,21 +14,24 @@ namespace SigningService.Signers.StrongName
 {
     internal class StrongNameSignerHelper
     {
-        private Lazy<HashAlgorithm> _hashAlgorithm;
         private readonly IKeyVaultAgent _keyVaultAgent;
-        private Lazy<Task<string>> _keyVaultKeyId;
         private Stream _peStream;
-        private Lazy<StrongNameSignerDataExtractor> _dataExtractor;
+
         private bool _strongNameSignedBitSet = false;
         private bool _strongNameSignedBitOverwritten = false;
+
+        // Lazy fields
+        private Lazy<Task<string>> _keyVaultKeyId;
+        private Lazy<HashAlgorithm> _hashAlgorithm;
+        private Lazy<StrongNameSignerDataExtractor> _dataExtractor;
 
         public StrongNameSignerHelper(IKeyVaultAgent keyVaultAgent, Stream peStream)
         {
             _keyVaultAgent = keyVaultAgent;
             _peStream = peStream;
-            _dataExtractor = new Lazy<StrongNameSignerDataExtractor>(ExtractData);
-            _hashAlgorithm = new Lazy<HashAlgorithm>(CreateHashAlgorithm);
-            _keyVaultKeyId = new Lazy<Task<string>>(GetKeyVaultKeyIdFromKeyVaultAsync);
+            _dataExtractor = new Lazy<StrongNameSignerDataExtractor>(InitDataExtractor);
+            _hashAlgorithm = new Lazy<HashAlgorithm>(InitHashAlgorithm);
+            _keyVaultKeyId = new Lazy<Task<string>>(InitKeyVaultKeyIdFromKeyVaultAsync);
         }
 
         public async Task<bool> TrySignAsync()
@@ -42,13 +46,6 @@ namespace SigningService.Signers.StrongName
             }
 
             return false;
-        }
-
-        // Do not call directly, use _keyVaultKeyId.Value instead
-        // This method should be called only during lazy initialization of _keyVaultKeyId
-        private async Task<string> GetKeyVaultKeyIdFromKeyVaultAsync()
-        {
-            return await _keyVaultAgent.GetRsaKeyIdAsync(PublicKey.Exponent, PublicKey.Modulus);
         }
 
         public async Task<string> GetKeyVaultKeyId()
@@ -76,7 +73,7 @@ namespace SigningService.Signers.StrongName
             ret &= dataExtractor.IsValidAssembly;
             ret &= !HasStrongNameSignature();
             ret &= _hashAlgorithm != null;
-            ret &= SupportsHashAlgorithm(HashAlgorithm);
+            ret &= SupportsHashAlgorithm(PublicKeyBlob.HashAlgorithm);
             //int hashSize = _hashAlgorithm.HashSize;
             // TODO: We need a way of predicting expected signature length
 
@@ -131,8 +128,6 @@ namespace SigningService.Signers.StrongName
             EmbedStrongNameSignature(signature);
         }
 
-        internal StrongNameSignerDataExtractor RawData { get { return _dataExtractor.Value; } }
-
         public byte[] ComputeHash()
         {
             using (MemoryStream ms = new MemoryStream())
@@ -143,14 +138,14 @@ namespace SigningService.Signers.StrongName
             }
         }
 
-        public byte[] PublicKeyBlob
+        public PublicKeyBlob PublicKeyBlob
         {
             get
             {
                 StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                if (dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob != null)
+                if (dataExtractor.AssemblySignatureKeyPublicKey != null)
                 {
-                    return dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob;
+                    return dataExtractor.AssemblySignatureKeyPublicKey;
                 }
                 else
                 {
@@ -159,107 +154,9 @@ namespace SigningService.Signers.StrongName
             }
         }
 
-        public byte[] AssemblyDefinitionPublicKeyBlob
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.PublicKeyBlob;
-            }
-        }
+        public PublicKeyBlob AssemblyDefinitionPublicKeyBlob { get { return _dataExtractor.Value.PublicKeyBlob; } }
 
-        public string AssemblyDefinitionPublicKeyToken
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.PublicKeyToken;
-            }
-        }
-
-        public AssemblyHashAlgorithm AssemblyDefinitionPublicKeyHashAlgorithm
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.HashAlgorithm;
-            }
-        }
-
-        public byte[] AssemblySignatureKeyAttributePublicKeyBlob
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob;
-            }
-        }
-
-        public string AssemblySignatureKeyAttributePublicKeyToken
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.AssemblySignatureKeyAttributePublicKeyToken;
-            }
-        }
-
-        public AssemblyHashAlgorithm AssemblySignatureKeyAttributePublicKeyHashAlgorithm
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                return dataExtractor.AssemblySignatureKeyAttributeHashAlgorithm;
-            }
-        }
-
-        public PublicKey PublicKey
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                if (dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob != null)
-                {
-                    return dataExtractor.AssemblySignatureKeyAttributePublicKey;
-                }
-                else
-                {
-                    return dataExtractor.PublicKey;
-                }
-            }
-        }
-
-        public string PublicKeyToken
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                if (dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob != null)
-                {
-                    return dataExtractor.AssemblySignatureKeyAttributePublicKeyToken;
-                }
-                else
-                {
-                    return dataExtractor.PublicKeyToken;
-                }
-            }
-        }
-
-        public AssemblyHashAlgorithm HashAlgorithm
-        {
-            get
-            {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
-                if (dataExtractor.AssemblySignatureKeyAttributePublicKeyBlob != null)
-                {
-                    return dataExtractor.AssemblySignatureKeyAttributeHashAlgorithm;
-                }
-                else
-                {
-                    return dataExtractor.HashAlgorithm;
-                }
-            }
-        }
+        public PublicKeyBlob AssemblySignatureKeyPublicKeyBlob { get { return _dataExtractor.Value.AssemblySignatureKeyPublicKey; } }
 
         public static bool SupportsHashAlgorithm(AssemblyHashAlgorithm hashAlgorithm)
         {
@@ -288,18 +185,34 @@ namespace SigningService.Signers.StrongName
             EmbedEmptyStrongNameSignature();
         }
 
-        private HashAlgorithm CreateHashAlgorithm()
+#region Lazy fields initializers
+        /// <summary>
+        /// Initializes lazy private field _dataExtractor
+        /// </summary>
+        /// <returns>Data extractor for PE file with CLI metadata</returns>
+        private StrongNameSignerDataExtractor InitDataExtractor()
         {
-            switch (HashAlgorithm)
-            {
-                case AssemblyHashAlgorithm.MD5: return MD5.Create();
-                case AssemblyHashAlgorithm.Sha1: return SHA1.Create();
-                case AssemblyHashAlgorithm.Sha256: return SHA256.Create();
-                case AssemblyHashAlgorithm.Sha384: return SHA384.Create();
-                case AssemblyHashAlgorithm.Sha512: return SHA512.Create();
-            }
-            return null;
+            return new StrongNameSignerDataExtractor(_peStream);
         }
+
+        /// <summary>
+        /// Initializes lazy private field _keyVaultKeyId
+        /// </summary>
+        /// <returns>KeyVault KeyId related to signature public key</returns>
+        private async Task<string> InitKeyVaultKeyIdFromKeyVaultAsync()
+        {
+            return await _keyVaultAgent.GetRsaKeyIdAsync(PublicKeyBlob.PublicKey.Exponent, PublicKeyBlob.PublicKey.Modulus);
+        }
+
+        /// <summary>
+        /// Initializes lazy private field _hashAlgorithm
+        /// </summary>
+        /// <returns>Instance of the System.Security.Cryptography.HashAlgorithm related to signature public key</returns>
+        private HashAlgorithm InitHashAlgorithm()
+        {
+            return HashingHelpers.CreateHashAlgorithm(PublicKeyBlob.HashAlgorithm);
+        }
+#endregion
 
         private byte[] PrepareForSigningAndComputeHash(Stream writablePEStream)
         {
@@ -310,7 +223,7 @@ namespace SigningService.Signers.StrongName
             }
 
             PrepareForSigning(writablePEStream);
-            return CalculateAssemblyHash(writablePEStream, _hashAlgorithm.Value, _dataExtractor.Value.SpecialHashingBlocks);
+            return HashingHelpers.CalculateAssemblyHash(writablePEStream, _hashAlgorithm.Value, _dataExtractor.Value.HashingBlocks);
         }
 
         private void PrepareForSigning(Stream writablePEStream)
@@ -411,132 +324,37 @@ namespace SigningService.Signers.StrongName
             SetStrongNameSignedFlag(_peStream, value);
         }
 
-        private StrongNameSignerDataExtractor ExtractData()
+        public override string ToString()
         {
-            return new StrongNameSignerDataExtractor(_peStream);
-        }
+            StringBuilder sb = new StringBuilder();
+            var dataExtractor = _dataExtractor.Value;
 
-        private static void CalculatePartialHashFromStream(Stream s, HashAlgorithm hashAlgorithm, int bytesToRead)
-        {
-            byte[] buffer = new byte[bytesToRead];
-            int totalBytesRead = 0;
-            while (bytesToRead > 0)
+            sb.AppendLine("Signature directory size: {0}", dataExtractor.StrongNameSignatureDirectorySize);
+            sb.AppendLine("AssemblyDefinition Hash Algorithm: {0}", AssemblyDefinitionPublicKeyBlob.HashAlgorithm);
+            if (AssemblySignatureKeyPublicKeyBlob != null)
             {
-                long prevPosition = s.Position;
-                int bytesRead = s.Read(buffer, totalBytesRead, bytesToRead);
-                totalBytesRead += bytesRead;
-                bytesToRead -= bytesRead;
-
-                if (bytesRead <= 0)
-                {
-                    ExceptionsHelper.ThrowUnexpectedEndOfStream(s.Position);
-                    return;
-                }
-                
-                hashAlgorithm.TransformBlock(buffer, 0, bytesRead, buffer, 0);
+                sb.AppendLine("AssemblySignatureKey Hash Algorithm: {0}", AssemblySignatureKeyPublicKeyBlob.HashAlgorithm);
             }
-        }
+            byte[] hash = ComputeHash();
 
-        private static void CalculatePartialHashFromZeros(HashAlgorithm hashAlgorithm, int numberOfZeroedBytes)
-        {
-            // Create 0-initialized array
-            byte[] buffer = new byte[numberOfZeroedBytes];
-            hashAlgorithm.TransformBlock(buffer, 0, buffer.Length, buffer, 0);
-        }
+            sb.AppendLine("Calculated hash size: {0}", hash.Length);
+            sb.AppendLine("Calculated hash: {0}", hash.ToHex());
 
-        private static byte[] CalculateAssemblyHashOld(Stream s, HashAlgorithm hashAlgorithm, List<DataBlock> skipBlocks)
-        {
-            hashAlgorithm.Initialize();
-
-            s.Seek(0, SeekOrigin.Begin);
-            int previousEnd = 0;
-            for (int i = 0; i < skipBlocks.Count; i++)
+            foreach (var block in dataExtractor.HashingBlocks)
             {
-                int bytesToRead = skipBlocks[i].Offset - previousEnd;
-                CalculatePartialHashFromStream(s, hashAlgorithm, bytesToRead);
-                if (s.Position != skipBlocks[i].Offset)
-                {
-                    ExceptionsHelper.ThrowPositionMismatch(skipBlocks[i].Offset, s.Position);
-                    return null;
-                }
-                switch (skipBlocks[i].Hashing)
-                {
-                    case DataBlockHashing.HashZeros:
-                    {
-                        CalculatePartialHashFromZeros(hashAlgorithm, skipBlocks[i].Size);
-                        s.Seek(skipBlocks[i].Size, SeekOrigin.Current);
-                        break;
-                    }
-                    case DataBlockHashing.Hash:
-                    {
-                        CalculatePartialHashFromStream(s, hashAlgorithm,  skipBlocks[i].Size);
-                        break;
-                    }
-                    case DataBlockHashing.Skip:
-                    {
-                        s.Seek(skipBlocks[i].Size, SeekOrigin.Current);
-                        break;
-                    }
-                    default:
-                    {
-                        ExceptionsHelper.ThrowDataBlockHashingValueIsInvalid(skipBlocks[i].Hashing);
-                        return null;
-                    }
-                }
-
-                previousEnd = skipBlocks[i].Offset + skipBlocks[i].Size;
-                if (s.Position != previousEnd)
-                {
-                    ExceptionsHelper.ThrowPositionMismatch(previousEnd, s.Position);
-                }
+                sb.AppendLine(block.ToString());
             }
 
-            long pos = previousEnd;
-            long end = s.Seek(0, SeekOrigin.End);
-            int bytesLeft = (int)(end - pos);
-            s.Seek(previousEnd, SeekOrigin.Begin);
-
-            CalculatePartialHashFromStream(s, hashAlgorithm, bytesLeft);
-
-            byte[] buffer = new byte[1];
-            hashAlgorithm.TransformFinalBlock(buffer, 0, 0);
-            return hashAlgorithm.Hash;
-        }
-
-        private static byte[] CalculateAssemblyHash(Stream s, HashAlgorithm hashAlgorithm, List<DataBlock> skipBlocks)
-        {
-            hashAlgorithm.Initialize();
-
-            for (int i = 0; i < skipBlocks.Count; i++)
+            sb.AppendLine("NumberOfSections = {0}", dataExtractor.NumberOfSections);
+            sb.AppendLine("SectionsHeadersEndOffset = {0}", dataExtractor.SectionsHeadersEndOffset);
+            sb.AppendLine("SectionsStartOffset = {0}", dataExtractor.SectionsStartOffset);
+            foreach (SectionInfo section in dataExtractor.SectionsInfo)
             {
-                switch (skipBlocks[i].Hashing)
-                {
-                    case DataBlockHashing.HashZeros:
-                    {
-                        CalculatePartialHashFromZeros(hashAlgorithm, skipBlocks[i].Size);
-                        break;
-                    }
-                    case DataBlockHashing.Hash:
-                    {
-                        s.Seek(skipBlocks[i].Offset, SeekOrigin.Begin);
-                        CalculatePartialHashFromStream(s, hashAlgorithm,  skipBlocks[i].Size);
-                        break;
-                    }
-                    case DataBlockHashing.Skip:
-                    {
-                        break;
-                    }
-                    default:
-                    {
-                        ExceptionsHelper.ThrowDataBlockHashingValueIsInvalid(skipBlocks[i].Hashing);
-                        return null;
-                    }
-                }
+                string name = section.Name.RemoveSpecialCharacters();
+                sb.AppendLine("SECTION(Name = {0}, Start = {1}, Size = {2})", name, section.Offset, section.Size);
             }
 
-            byte[] buffer = new byte[1];
-            hashAlgorithm.TransformFinalBlock(buffer, 0, 0);
-            return hashAlgorithm.Hash;
+            return sb.ToString();
         }
     }
 }

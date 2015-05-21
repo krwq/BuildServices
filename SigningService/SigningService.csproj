@@ -227,6 +227,8 @@
     <Compile Include="App_Start\UnityMvcActivator.cs" />
     <Compile Include="App_Start\WebApiConfig.cs" />
     <Compile Include="Controllers\SignController.cs" />
+    <Compile Include="Extensions\StringBuilderExt.cs" />
+    <Compile Include="Extensions\StringExt.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
     </Compile>
@@ -242,11 +244,12 @@
     <Compile Include="Services\Configuration\ServiceIdentitySettings.cs" />
     <Compile Include="Services\ExceptionHandling\TraceExceptionLogger.cs" />
     <Compile Include="Agents\SignAgent.cs" />
-    <Compile Include="Extensions\ByteArrayHelpers.cs" />
+    <Compile Include="Extensions\ByteArrayExt.cs" />
     <Compile Include="Signers\StrongName\CustomAttributeDataExtractor.cs" />
-    <Compile Include="Signers\StrongName\DataBlock.cs" />
-    <Compile Include="Signers\StrongName\DataBlockHashing.cs" />
+    <Compile Include="Signers\StrongName\HashingBlock.cs" />
+    <Compile Include="Signers\StrongName\HashingBlockHashing.cs" />
     <Compile Include="Signers\StrongName\ExceptionsHelper.cs" />
+    <Compile Include="Signers\StrongName\HashingHelpers.cs" />
     <Compile Include="Signers\StrongName\MetadataReader\Internal\MemoryBlocks\AbstractMemoryBlock.cs" />
     <Compile Include="Signers\StrongName\MetadataReader\Internal\MemoryBlocks\ByteArrayMemoryBlock.cs" />
     <Compile Include="Signers\StrongName\MetadataReader\Internal\MemoryBlocks\ByteArrayMemoryProvider.cs" />
@@ -371,7 +374,7 @@
     <Compile Include="Signers\StrongName\MetadataReader\PortableExecutable\SectionHeader.cs" />
     <Compile Include="Signers\StrongName\MetadataReader\System.Reflection.cs" />
     <Compile Include="Models\PublicKey.cs" />
-    <Compile Include="Signers\StrongName\PublicKeyBlobHelper.cs" />
+    <Compile Include="Signers\StrongName\PublicKeyBlob.cs" />
     <Compile Include="Signers\StrongName\SectionInfo.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerHelper.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerDataExtractor.cs" />

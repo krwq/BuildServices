@@ -7,7 +7,7 @@
             throw new StrongNameSignerException("Position mismatch! Expected position: {0}, Actual position: {1}", expectedPosition, actualPosition);
         }
 
-        public static void ThrowDataBlockHashingValueIsInvalid(DataBlockHashing value)
+        public static void ThrowDataBlockHashingValueIsInvalid(HashingBlockHashing value)
         {
             throw new StrongNameSignerException("DataBlockHashing value is invalid! (int)Value = {0}", (int)value);
         }

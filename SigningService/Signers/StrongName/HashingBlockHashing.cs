@@ -1,6 +1,6 @@
 ﻿namespace SigningService.Signers.StrongName
 {
-    internal enum DataBlockHashing
+    internal enum HashingBlockHashing
     {
         Hash,
         Skip,

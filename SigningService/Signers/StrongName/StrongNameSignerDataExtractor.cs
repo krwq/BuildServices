@@ -1,4 +1,5 @@
-﻿using SigningService.Models;
+﻿using SigningService.Extensions;
+using SigningService.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,7 +24,7 @@ namespace SigningService.Signers.StrongName
             IsValidAssembly = true;
 
             ExtractData();
-            SpecialHashingBlocks = SortAndJoinIntersectingDataBlocks(GetSpecialHashingBlocks());
+            HashingBlocks = SortAndJoinIntersectingDataBlocks(GetHashingBlocks());
         }
 
         private unsafe void ExtractData()
@@ -77,10 +78,7 @@ namespace SigningService.Signers.StrongName
 
                 MetadataReader mr = peReader.GetMetadataReader();
                 AssemblyDefinition assemblyDef = mr.GetAssemblyDefinition();
-                PublicKeyBlob = mr.GetBlobBytes(assemblyDef.PublicKey);
-                PublicKey = PublicKeyBlobHelper.GetPublicKey(PublicKeyBlob);
-                PublicKeyToken = PublicKeyBlobHelper.GetPublicKeyToken(PublicKeyBlob);
-                HashAlgorithm = PublicKeyBlobHelper.GetHashAlgorithm(PublicKeyBlob);
+                PublicKeyBlob = new PublicKeyBlob(mr.GetBlobBytes(assemblyDef.PublicKey));
 
                 foreach (CustomAttributeHandle cah in mr.GetCustomAttributes(Handle.AssemblyDefinition))
                 {
@@ -91,51 +89,47 @@ namespace SigningService.Signers.StrongName
                         List<string> args = CustomAttributeDataExtractor.GetFixedStringArguments(mr, ca);
                         if (args.Count == 2)
                         {
-                            string publicKey = args[0];
-                            AssemblySignatureKeyAttributePublicKeyBlob = PublicKeyBlobHelper.ByteArrayFromHex(publicKey);
-                            AssemblySignatureKeyAttributePublicKey = PublicKeyBlobHelper.GetPublicKey(AssemblySignatureKeyAttributePublicKeyBlob);
-                            AssemblySignatureKeyAttributeHashAlgorithm = PublicKeyBlobHelper.GetHashAlgorithm(AssemblySignatureKeyAttributePublicKeyBlob);
-                            AssemblySignatureKeyAttributePublicKeyToken = PublicKeyBlobHelper.GetPublicKeyToken(AssemblySignatureKeyAttributePublicKeyBlob);
+                            AssemblySignatureKeyPublicKey = new PublicKeyBlob(args[0]);
+                            AssemblySignatureKeyCounterSignature = ByteArrayExt.FromHex(args[1]);
                         }
                     }
                 }
             }
         }
 
-        private List<DataBlock> GetSpecialHashingBlocks()
+        // Decides what parts of PE will be hashed
+        private List<HashingBlock> GetHashingBlocks()
         {
-            List<DataBlock> specialHashingBlocks = new List<DataBlock>(16);
+            List<HashingBlock> specialHashingBlocks = new List<HashingBlock>(16);
 
-            specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "PE Headers", 0, PaddingBetweenTheSectionHeadersAndSectionsOffset));
-            int i = 0;
+            specialHashingBlocks.Add(new HashingBlock(HashingBlockHashing.Hash, "PE Headers", 0, PaddingBetweenTheSectionHeadersAndSectionsOffset));
             foreach (var section in SectionsInfo)
             {
-                string name = string.Format("Section {0}", i++);
-                specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, name, section.Offset, section.Size));
+                string name = string.Format("Section {0}", section.Name);
+                specialHashingBlocks.Add(new HashingBlock(HashingBlockHashing.Hash, name, section.Offset, section.Size));
             }
 
-            specialHashingBlocks.Add(new DataBlock(DataBlockHashing.HashZeros, "Checksum", ChecksumOffset, ChecksumSize));
-            //specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "StrongNameSignatureDirectory header", StrongNameSignatureDirectoryHeaderOffset, StrongNameSignatureDirectoryHeaderSize));
-            specialHashingBlocks.Add(new DataBlock(DataBlockHashing.HashZeros, "CertificateTableDirectory header", CertificateTableDirectoryHeaderOffset, CertificateTableDirectoryHeaderSize));
-            //specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Skip, "Padding between directory headers and sections", PaddingBetweenTheSectionHeadersAndSectionsOffset, PaddingBetweenTheSectionHeadersAndSectionsSize));
+            specialHashingBlocks.Add(new HashingBlock(HashingBlockHashing.HashZeros, "Checksum", ChecksumOffset, ChecksumSize));
+
+            specialHashingBlocks.Add(new HashingBlock(HashingBlockHashing.Hash, "StrongNameSignatureDirectory header", StrongNameSignatureDirectoryHeaderOffset, StrongNameSignatureDirectoryHeaderSize));
+            specialHashingBlocks.Add(new HashingBlock(HashingBlockHashing.HashZeros, "CertificateTableDirectory header", CertificateTableDirectoryHeaderOffset, CertificateTableDirectoryHeaderSize));
 
             if (HasStrongNameSignatureDirectory)
             {
-                specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Skip, "StrongNameSignatureDirectory", StrongNameSignatureDirectoryOffset, StrongNameSignatureDirectorySize));
+                specialHashingBlocks.Add(new HashingBlock(HashingBlockHashing.Skip, "StrongNameSignatureDirectory", StrongNameSignatureDirectoryOffset, StrongNameSignatureDirectorySize));
             }
 
-            if (HasCertificateTableDirectory)
-            {
-                // It is not clear what to do with this block. According to ECMA-335 we should skip it which can either mean Skip or HashZeros 
-                // although looking at sn.exe implementation I didn't see they are doing that so leaving it as Hash
-                //specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "CertificateTableDirectory", CertificateTableDirectoryOffset, CertificateTableDirectorySize));
-            }
+            // In theory we should be hashing it, in practice in some cases it might be past the last section
+            //if (HasCertificateTableDirectory)
+            //{
+            //    specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "CertificateTableDirectory", CertificateTableDirectoryOffset, CertificateTableDirectorySize));
+            //}
 
             return specialHashingBlocks;
         }
 
         // Sorts by offsets and joins adjacent blocks
-        // THIS IS SIMPLE IMPLEMENTATION which assumes there is are up to 2 overlapping blocks at a time.
+        // THIS IS SIMPLE IMPLEMENTATION which assumes there are up to 2 overlapping blocks at a time.
         // This might not work properly for 3 or more overlapping blocks.
         // TODO: Use priority to determine what hashing action we should take.
         //       We should use PriorityQueue implementation and split blocks into (begin, offset, id) (end, offset, id)
@@ -160,13 +154,13 @@ namespace SigningService.Signers.StrongName
         // Results in:
         // ,______,___,_,
         // HASH    SKIP HASH
-        private static List<DataBlock> SortAndJoinIntersectingDataBlocks(List<DataBlock> blocks)
+        private static List<HashingBlock> SortAndJoinIntersectingDataBlocks(List<HashingBlock> blocks)
         {
             blocks.Sort();
 
-            List<DataBlock> ret = new List<DataBlock>(16);
+            List<HashingBlock> ret = new List<HashingBlock>(16);
 
-            DataBlock prev = new DataBlock(DataBlockHashing.Hash, "Fake block beginning", 0, 0);
+            HashingBlock prev = new HashingBlock(HashingBlockHashing.Hash, "Fake block beginning", 0, 0);
             for (int i = 0; i < blocks.Count; i++)
             {
                 // are intersecting? (adjacent is ok)
@@ -195,19 +189,19 @@ namespace SigningService.Signers.StrongName
                             // ,______,_______,_______,
                             //  LEFT   MIDDLE  RIGHT
                             // where MIDDLE = blocks[i]
-                            if (prev.Hashing ==  DataBlockHashing.Hash)
+                            if (prev.Hashing ==  HashingBlockHashing.Hash)
                             {
                                 int leftBlockSize = blocks[i].Offset - prev.Offset;
                                 if (leftBlockSize > 0)
                                 {
                                     // we add left block if size is non zero
-                                    ret.Add(new DataBlock(prev.Hashing, prev.Name, prev.Offset, leftBlockSize));
+                                    ret.Add(new HashingBlock(prev.Hashing, prev.Name, prev.Offset, leftBlockSize));
                                 }
 
                                 int rightBlockEndOffset = prev.Offset + prev.Size;
                                 int middleBlockEndOffset = blocks[i].Offset + blocks[i].Size;
 
-                                DataBlock rightBlock = new DataBlock(prev.Hashing, prev.Name, middleBlockEndOffset, rightBlockEndOffset - middleBlockEndOffset);
+                                HashingBlock rightBlock = new HashingBlock(prev.Hashing, prev.Name, middleBlockEndOffset, rightBlockEndOffset - middleBlockEndOffset);
                                 if (rightBlock.Size > 0)
                                 {
                                     // we add middle block and right block if right is non-zero
@@ -221,7 +215,7 @@ namespace SigningService.Signers.StrongName
                                     prev = blocks[i];
                                 }
                             }
-                            else if (blocks[i].Hashing == DataBlockHashing.Hash)
+                            else if (blocks[i].Hashing == HashingBlockHashing.Hash)
                             {
                                 // Let's assume that hashing is always less important as it is default.
                                 int leftBlockEndOffset = prev.Offset + prev.Size;
@@ -292,22 +286,15 @@ namespace SigningService.Signers.StrongName
 
         public int SectionsHeadersEndOffset { get; private set; }
         public int NumberOfSections { get; private set; }
+        public List<SectionInfo> SectionsInfo { get; private set; }
         public int SectionsStartOffset { get; private set; }
         public int PaddingBetweenTheSectionHeadersAndSectionsOffset { get { return SectionsHeadersEndOffset; } }
         public int PaddingBetweenTheSectionHeadersAndSectionsSize { get { return SectionsStartOffset - SectionsHeadersEndOffset; } }
 
-        public List<DataBlock> SpecialHashingBlocks { get; private set; }
+        public List<HashingBlock> HashingBlocks { get; private set; }
 
-        public byte[] PublicKeyBlob { get; private set; }
-        public PublicKey PublicKey { get; private set; }
-        public string PublicKeyToken { get; private set; }
-        public AssemblyHashAlgorithm HashAlgorithm { get; private set; }
-
-        public byte[] AssemblySignatureKeyAttributePublicKeyBlob { get; private set; }
-        public PublicKey AssemblySignatureKeyAttributePublicKey { get; private set; }
-        public string AssemblySignatureKeyAttributePublicKeyToken { get; private set; }
-        public AssemblyHashAlgorithm AssemblySignatureKeyAttributeHashAlgorithm { get; private set; }
-
-        public IEnumerable<SectionInfo> SectionsInfo { get; private set; }
+        public PublicKeyBlob PublicKeyBlob { get; private set; }
+        public PublicKeyBlob AssemblySignatureKeyPublicKey { get; private set; }
+        public byte[] AssemblySignatureKeyCounterSignature { get; private set; }
     }
 }

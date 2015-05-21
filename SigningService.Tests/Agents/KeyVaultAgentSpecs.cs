@@ -1,24 +1,12 @@
-﻿using FluentAssertions;
-using Its.Configuration;
-using Its.Log.Instrumentation;
-using Microsoft.Its.Recipes;
-using Moq;
+﻿using Its.Configuration;
 using SigningService.Agents;
-using System;
-using System.Collections.Generic;
+using SigningService.Models;
+using SigningService.Signers.StrongName;
+using SigningService.Tests.Utils;
 using System.IO;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-using Microsoft.Azure.KeyVault.WebKey;
-using System.Security.Cryptography.X509Certificates;
-using System.Reflection;
-using SigningService.Extensions;
-using SigningService.Signers.StrongName;
-using SigningService.Tests.Utils;
 
 namespace SigningService.Tests
 {
@@ -36,7 +24,8 @@ namespace SigningService.Tests
             StrongNameSignerHelper sns = new StrongNameSignerHelper(peImage);
 
             var keyVaultAgent = new KeyVaultAgent();
-            string keyId = await keyVaultAgent.GetRsaKeyIdAsync(sns.PublicKeyBlob.PublicKey.Exponent, sns.PublicKeyBlob.PublicKey.Modulus);
+            PublicKey publicKey = sns.SignaturePublicKeyBlob.PublicKey;
+            string keyId = await keyVaultAgent.GetRsaKeyIdAsync(publicKey.Exponent, publicKey.Modulus);
             output.WriteLine("KeyVault KeyId = {0}", keyId ?? "<None>");
             output.WriteLine(sns.ToString());
             peImage.Dispose();

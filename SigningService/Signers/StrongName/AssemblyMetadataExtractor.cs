@@ -52,8 +52,8 @@ namespace SigningService.Signers.StrongName
         public int PaddingBetweenTheSectionHeadersAndSectionsOffset { get { return SectionsHeadersEndOffset; } }
 
         public PublicKeyBlob AssemblyDefinitionPublicKeyBlob { get; private set; }
-        public PublicKeyBlob AssemblySignatureKeyAttributePublicKey { get; private set; }
-        public byte[] AssemblySignatureKeyAttributeCounterSignature { get; private set; }
+        public PublicKeyBlob AssemblySignatureKeyAttributePublicKeyBlob { get; private set; }
+        public byte[] AssemblySignatureKeyAttributeCounterSignatureBlob { get; private set; }
 
         /// <summary>
         /// Extracts metadata from assembly
@@ -118,8 +118,8 @@ namespace SigningService.Signers.StrongName
                         List<string> args = CustomAttributeDataExtractor.GetFixedStringArguments(mr, ca);
                         if (args.Count == 2)
                         {
-                            AssemblySignatureKeyAttributePublicKey = new PublicKeyBlob(args[0]);
-                            AssemblySignatureKeyAttributeCounterSignature = ByteArrayExt.FromHex(args[1]);
+                            AssemblySignatureKeyAttributePublicKeyBlob = new PublicKeyBlob(args[0]);
+                            AssemblySignatureKeyAttributeCounterSignatureBlob = ByteArrayExt.FromHex(args[1]);
                         }
                     }
                 }

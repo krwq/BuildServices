@@ -1,5 +1,6 @@
 ﻿using SigningService.Agents;
 using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace SigningService.Signers.StrongName
@@ -16,17 +17,28 @@ namespace SigningService.Signers.StrongName
         public async Task<bool> TrySignAsync(Stream peStream)
         {
             StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(peStream);
-            if (strongNameSigner.CanSign())
+            if (strongNameSigner.CanEmbedSignature)
             {
+                if (!SupportsHashAlgorithm(strongNameSigner.SignaturePublicKeyBlob.HashAlgorithm))
+                {
+                    return false;
+                }
+
+                byte[] hash = strongNameSigner.ComputeHash();
+
                 string keyId = await GetKeyVaultId(strongNameSigner);
                 if (keyId == null)
                 {
                     return false;
                 }
 
-                byte[] hash = strongNameSigner.ComputeHash();
                 byte[] signature = await _keyVaultAgent.SignAsync(keyId, hash);
-                strongNameSigner.EmbedStrongNameSignature(signature);
+                if (strongNameSigner.StrongNameSignatureSize != signature.Length)
+                {
+                    return false;
+                }
+
+                strongNameSigner.StrongNameSignature = signature;
                 return true;
             }
 
@@ -36,7 +48,7 @@ namespace SigningService.Signers.StrongName
         public async Task<bool> CanSignAsync(Stream peStream)
         {
             StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(peStream);
-            if (!strongNameSigner.CanSign())
+            if (!strongNameSigner.CanEmbedSignature)
             {
                 return false;
             }
@@ -45,12 +57,24 @@ namespace SigningService.Signers.StrongName
             return keyId != null;
         }
 
+        private static bool SupportsHashAlgorithm(AssemblyHashAlgorithm hashAlgorithm)
+        {
+            switch (hashAlgorithm)
+            {
+                case AssemblyHashAlgorithm.Sha256:
+                case AssemblyHashAlgorithm.Sha384:
+                case AssemblyHashAlgorithm.Sha512:
+                    return true;
+                default: return false;
+            }
+        }
+
         /// <summary>
         /// Gets KeyVault KeyId related to signature public key
         /// </summary>
         internal async Task<string> GetKeyVaultId(StrongNameSignerHelper strongNameSigner)
         {
-            return await _keyVaultAgent.GetRsaKeyIdAsync(strongNameSigner.PublicKeyBlob.PublicKey.Exponent, strongNameSigner.PublicKeyBlob.PublicKey.Modulus);
+            return await _keyVaultAgent.GetRsaKeyIdAsync(strongNameSigner.SignaturePublicKeyBlob.PublicKey.Exponent, strongNameSigner.SignaturePublicKeyBlob.PublicKey.Modulus);
         }
     }
 }

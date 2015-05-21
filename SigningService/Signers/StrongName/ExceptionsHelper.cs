@@ -50,6 +50,11 @@ namespace SigningService.Signers.StrongName
             throw new StrongNameSignerException("Assembly has different strong name signature directory size than provided signature! Strong name signature directory size: {0}. Size of provided signature: {1}", strongNameSignatureDirectorySize, signatureSize);
         }
 
+        public static void ThrowAssemblyNotHashable()
+        {
+            throw new StrongNameSignerException("Assembly is not hashable!");
+        }
+
         public static void ThrowPEImageHasNoSections()
         {
             ThrowBadImageFormatException("PE Image has no sections!");

@@ -23,7 +23,7 @@ namespace SigningService.Tests
         }
 
         [Theory, MemberData("TestAssembliesWithKnownHash")]
-        public async void Hash_test(TestAssembly testAssembly)
+        public void Hash_test(TestAssembly testAssembly)
         {
             output.WriteLine("Assembly: {0}", testAssembly.ResourceName);
             //var keyVaultAgentMock = new Mock<IKeyVaultAgent>(MockBehavior.Strict);
@@ -60,9 +60,9 @@ namespace SigningService.Tests
             using (Stream outputPeImage = testAssembly.GetWritablePEImage())
             {
                 StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(outputPeImage);
-                if (strongNameSigner.HasStrongNameSignature())
+                if (strongNameSigner.HasStrongNameSignature)
                 {
-                    strongNameSigner.RemoveSignature();
+                    strongNameSigner.RemoveStrongNameSignature();
                     using (FileStream fs = new FileStream(testAssembly.ResourceName + ".nonsigned.dll", FileMode.Create, FileAccess.Write))
                     {
                         outputPeImage.Seek(0, SeekOrigin.Begin);

@@ -13,16 +13,44 @@ namespace SigningService.Signers.StrongName
             _keyVaultAgent = keyVaultAgent;
         }
 
-        public Task<bool> TrySignAsync(Stream peStream)
+        public async Task<bool> TrySignAsync(Stream peStream)
         {
-            StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(_keyVaultAgent, peStream);
-            return strongNameSigner.TrySignAsync();
+            StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(peStream);
+            if (strongNameSigner.CanSign())
+            {
+                string keyId = await GetKeyVaultId(strongNameSigner);
+                if (keyId == null)
+                {
+                    return false;
+                }
+
+                byte[] hash = strongNameSigner.ComputeHash();
+                byte[] signature = await _keyVaultAgent.SignAsync(keyId, hash);
+                strongNameSigner.EmbedStrongNameSignature(signature);
+                return true;
+            }
+
+            return false;
         }
 
-        public Task<bool> CanSignAsync(Stream peStream)
+        public async Task<bool> CanSignAsync(Stream peStream)
         {
-            StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(_keyVaultAgent, peStream);
-            return strongNameSigner.CanSignAsync();
+            StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(peStream);
+            if (!strongNameSigner.CanSign())
+            {
+                return false;
+            }
+            
+            string keyId = await GetKeyVaultId(strongNameSigner);
+            return keyId != null;
+        }
+
+        /// <summary>
+        /// Gets KeyVault KeyId related to signature public key
+        /// </summary>
+        internal async Task<string> GetKeyVaultId(StrongNameSignerHelper strongNameSigner)
+        {
+            return await _keyVaultAgent.GetRsaKeyIdAsync(strongNameSigner.PublicKeyBlob.PublicKey.Exponent, strongNameSigner.PublicKeyBlob.PublicKey.Modulus);
         }
     }
 }

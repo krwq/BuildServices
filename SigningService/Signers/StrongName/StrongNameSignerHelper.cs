@@ -13,45 +13,22 @@ namespace SigningService.Signers.StrongName
 {
     internal class StrongNameSignerHelper
     {
-        private readonly IKeyVaultAgent _keyVaultAgent;
         private Stream _peStream;
 
         private bool _strongNameSignedBitSet = false;
         private bool _strongNameSignedBitOverwritten = false;
 
         // Lazy fields
-        private Lazy<Task<string>> _keyVaultKeyId;
         private Lazy<HashAlgorithm> _hashAlgorithm;
         private Lazy<AssemblyMetadataExtractor> _dataExtractor;
         private Lazy<List<HashingBlock>> _hashingBlocks;
 
-        public StrongNameSignerHelper(IKeyVaultAgent keyVaultAgent, Stream peStream)
+        public StrongNameSignerHelper(Stream peStream)
         {
-            _keyVaultAgent = keyVaultAgent;
             _peStream = peStream;
             _dataExtractor = new Lazy<AssemblyMetadataExtractor>(InitDataExtractor);
             _hashAlgorithm = new Lazy<HashAlgorithm>(InitHashAlgorithm);
-            _keyVaultKeyId = new Lazy<Task<string>>(InitKeyVaultKeyIdFromKeyVaultAsync);
             _hashingBlocks = new Lazy<List<HashingBlock>>(InitHashingBlocks);
-        }
-
-        public async Task<bool> TrySignAsync()
-        {
-            if (await CanSignAsync())
-            {
-                byte[] hash = PrepareForSigningAndComputeHash(_peStream);
-                string keyId = await _keyVaultKeyId.Value;
-                byte[] signature = await _keyVaultAgent.SignAsync(keyId, hash);
-                EmbedStrongNameSignature(signature);
-                return true;
-            }
-
-            return false;
-        }
-
-        public async Task<string> GetKeyVaultKeyId()
-        {
-            return await _keyVaultKeyId.Value;
         }
 
         public bool HasStrongNameSignature()
@@ -66,25 +43,18 @@ namespace SigningService.Signers.StrongName
             return _strongNameSignedBitOverwritten ? _strongNameSignedBitSet : dataExtractor.HasStrongNameSignedFlag;
         }
 
-        public async Task<bool> CanSignAsync()
+        public bool CanSign()
         {
             AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
 
             bool ret = _peStream.CanWrite && _peStream.CanSeek && _peStream.CanRead;
             ret &= !HasStrongNameSignature();
-            ret &= _hashAlgorithm != null;
+            ret &= _hashAlgorithm.Value != null;
             ret &= SupportsHashAlgorithm(PublicKeyBlob.HashAlgorithm);
             //int hashSize = _hashAlgorithm.HashSize;
             // TODO: We need a way of predicting expected signature length
 
-            if (!ret)
-            {
-                // No need for actual async
-                return false;
-            }
-
-            string keyId = await _keyVaultKeyId.Value;
-            return keyId != null;
+            return ret;
         }
 
         public bool CanHash
@@ -189,15 +159,6 @@ namespace SigningService.Signers.StrongName
         private AssemblyMetadataExtractor InitDataExtractor()
         {
             return new AssemblyMetadataExtractor(_peStream);
-        }
-
-        /// <summary>
-        /// Initializes lazy private field _keyVaultKeyId
-        /// </summary>
-        /// <returns>KeyVault KeyId related to signature public key</returns>
-        private async Task<string> InitKeyVaultKeyIdFromKeyVaultAsync()
-        {
-            return await _keyVaultAgent.GetRsaKeyIdAsync(PublicKeyBlob.PublicKey.Exponent, PublicKeyBlob.PublicKey.Modulus);
         }
 
         /// <summary>

@@ -23,51 +23,46 @@ namespace SigningService.Tests
         }
 
         [Theory, MemberData("TestAssembliesWithKnownHash")]
-        public async void Mock_sign_test(TestAssembly testAssembly)
+        public async void Hash_test(TestAssembly testAssembly)
         {
             output.WriteLine("Assembly: {0}", testAssembly.ResourceName);
-            var keyVaultAgentMock = new Mock<IKeyVaultAgent>(MockBehavior.Strict);
+            //var keyVaultAgentMock = new Mock<IKeyVaultAgent>(MockBehavior.Strict);
 
-            string keyId = Any.String(4, 10, "uvwxyz");
-            byte[] expectedSignature = Any.Sequence(i => Any.Byte(), 256).ToArray();
+            //string keyId = Any.String(4, 10, "uvwxyz");
+            //byte[] expectedSignature = Any.Sequence(i => Any.Byte(), 256).ToArray();
 
-            keyVaultAgentMock
-                .Setup(k => k.SignAsync(It.Is<string>(s => s.Equals(keyId)), It.IsAny<byte[]>()))
-                .Returns(Task.FromResult(expectedSignature));
-            keyVaultAgentMock
-                .Setup(k => k.GetRsaKeyIdAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>()))
-                .Returns(Task.FromResult(keyId));
+            //keyVaultAgentMock
+            //    .Setup(k => k.SignAsync(It.Is<string>(s => s.Equals(keyId)), It.IsAny<byte[]>()))
+            //    .Returns(Task.FromResult(expectedSignature));
+            //keyVaultAgentMock
+            //    .Setup(k => k.GetRsaKeyIdAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>()))
+            //    .Returns(Task.FromResult(keyId));
+            // IKeyVaultAgent agent = keyVaultAgentMock.Object;
 
             using (Stream outputPeImage = testAssembly.GetWritablePEImage())
             {
-                StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(keyVaultAgentMock.Object, outputPeImage);
+                StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(outputPeImage);
                 output.WriteLine("Expected hash size: {0}", testAssembly.StrongNameSignatureHash.Length);
                 output.WriteLine("Expected hash: {0}", testAssembly.StrongNameSignatureHash.ToHex());
                 output.WriteLine(strongNameSigner.ToString());
-
-                strongNameSigner.RemoveSignature();
-                bool result = await strongNameSigner.TrySignAsync();
-                result.Should().BeTrue();
-                
                 strongNameSigner.ComputeHash().Should().BeEquivalentTo(testAssembly.StrongNameSignatureHash);
-                strongNameSigner.ExtractStrongNameSignature().Should().BeEquivalentTo(expectedSignature);
             }
 
-            keyVaultAgentMock.Verify(k => k.SignAsync(It.IsAny<string>(), It.IsAny<byte[]>()), Times.Once);
-            keyVaultAgentMock.Verify(k => k.GetRsaKeyIdAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>()), Times.Once);
+            //keyVaultAgentMock.Verify(k => k.SignAsync(It.IsAny<string>(), It.IsAny<byte[]>()), Times.Once);
+            //keyVaultAgentMock.Verify(k => k.GetRsaKeyIdAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>()), Times.Once);
         }
 
         // Use this test method if sn.exe doesn't let you get the digest file from signed dll file
-        // After this test is finished you should see .nonsigned.dll files in your output directory
+        // After this test is finished you should see .nonsigned.dll files for each signed assembly in your output directory
         [Theory(Skip = "Helper test method"), MemberData("AllTestAssemblies")]
         public void Remove_signature_from_signed_assemblies_and_save_to_file(TestAssembly testAssembly)
         {
             using (Stream outputPeImage = testAssembly.GetWritablePEImage())
             {
-                StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(null, outputPeImage);
-                strongNameSigner.RemoveSignature();
+                StrongNameSignerHelper strongNameSigner = new StrongNameSignerHelper(outputPeImage);
                 if (strongNameSigner.HasStrongNameSignature())
                 {
+                    strongNameSigner.RemoveSignature();
                     using (FileStream fs = new FileStream(testAssembly.ResourceName + ".nonsigned.dll", FileMode.Create, FileAccess.Write))
                     {
                         outputPeImage.Seek(0, SeekOrigin.Begin);

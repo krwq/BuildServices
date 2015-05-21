@@ -31,19 +31,14 @@ namespace SigningService.Tests
             this.output = output;
         }
 
-        public async Task PrintMetadata(IKeyVaultAgent keyVault, Stream peImage)
+        public async Task PrintMetadata(Stream peImage)
         {
-            StrongNameSignerHelper sns = new StrongNameSignerHelper(keyVault, peImage);
+            StrongNameSignerHelper sns = new StrongNameSignerHelper(peImage);
 
-            sns.SetStrongNameSignedFlag();
-            output.WriteLine("SNS dir size = {0}", sns.ExtractStrongNameSignature().Length);
-            output.WriteLine("HashAlgorithm = {0}", sns.PublicKeyBlob.HashAlgorithm);
-            output.WriteLine("Public Key Token = {0}", sns.PublicKeyBlob.PublicKeyToken);
-            output.WriteLine("Public Key Modulus = {0}", sns.PublicKeyBlob.PublicKey.Modulus.ToHex());
-            output.WriteLine("Public Key Exponent = {0}", sns.PublicKeyBlob.PublicKey.Exponent.ToHex());
-            string keyId = await sns.GetKeyVaultKeyId();
-            output.WriteLine("KeyVault storing key = {0}", keyId != null ? keyId : "<None>");
-
+            var keyVaultAgent = new KeyVaultAgent();
+            string keyId = await keyVaultAgent.GetRsaKeyIdAsync(sns.PublicKeyBlob.PublicKey.Exponent, sns.PublicKeyBlob.PublicKey.Modulus);
+            output.WriteLine("KeyVault KeyId = {0}", keyId ?? "<None>");
+            output.WriteLine(sns.ToString());
             peImage.Dispose();
         }
 
@@ -56,12 +51,11 @@ namespace SigningService.Tests
             TestAssembly jscript = new TestAssembly("Microsoft.JScript.dll", null);
 
             Settings.Precedence = new string [] { "test" };
-            var keyVaultAgent = new KeyVaultAgent();
 
-            await PrintMetadata(keyVaultAgent, sha256.GetWritablePEImage());
-            await PrintMetadata(keyVaultAgent, sha384.GetWritablePEImage());
-            await PrintMetadata(keyVaultAgent, ppsha256delay.GetWritablePEImage());
-            await PrintMetadata(keyVaultAgent, jscript.GetWritablePEImage());
+            await PrintMetadata(sha256.GetWritablePEImage());
+            await PrintMetadata(sha384.GetWritablePEImage());
+            await PrintMetadata(ppsha256delay.GetWritablePEImage());
+            await PrintMetadata(jscript.GetWritablePEImage());
         }
 
         [Fact]

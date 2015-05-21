@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Web;
+﻿using SigningService.Extensions;
 
 namespace SigningService.Signers.StrongName
 {
@@ -10,5 +7,11 @@ namespace SigningService.Signers.StrongName
         public string Name;
         public int Offset;
         public int Size;
+
+        public override string ToString()
+        {
+            string name = Name.RemoveSpecialCharacters();
+            return string.Format("SECTION(Name = {0}, Start = {1}, Size = {2})", name, Offset, Size);
+        }
     }
 }

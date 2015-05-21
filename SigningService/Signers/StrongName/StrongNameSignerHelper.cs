@@ -1,5 +1,4 @@
 ﻿using SigningService.Agents;
-using SigningService.Models;
 using SigningService.Extensions;
 using System;
 using System.Collections.Generic;
@@ -23,15 +22,17 @@ namespace SigningService.Signers.StrongName
         // Lazy fields
         private Lazy<Task<string>> _keyVaultKeyId;
         private Lazy<HashAlgorithm> _hashAlgorithm;
-        private Lazy<StrongNameSignerDataExtractor> _dataExtractor;
+        private Lazy<AssemblyMetadataExtractor> _dataExtractor;
+        private Lazy<List<HashingBlock>> _hashingBlocks;
 
         public StrongNameSignerHelper(IKeyVaultAgent keyVaultAgent, Stream peStream)
         {
             _keyVaultAgent = keyVaultAgent;
             _peStream = peStream;
-            _dataExtractor = new Lazy<StrongNameSignerDataExtractor>(InitDataExtractor);
+            _dataExtractor = new Lazy<AssemblyMetadataExtractor>(InitDataExtractor);
             _hashAlgorithm = new Lazy<HashAlgorithm>(InitHashAlgorithm);
             _keyVaultKeyId = new Lazy<Task<string>>(InitKeyVaultKeyIdFromKeyVaultAsync);
+            _hashingBlocks = new Lazy<List<HashingBlock>>(InitHashingBlocks);
         }
 
         public async Task<bool> TrySignAsync()
@@ -55,7 +56,7 @@ namespace SigningService.Signers.StrongName
 
         public bool HasStrongNameSignature()
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
 
             if (!dataExtractor.HasStrongNameSignatureDirectory)
             {
@@ -67,10 +68,9 @@ namespace SigningService.Signers.StrongName
 
         public async Task<bool> CanSignAsync()
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
 
             bool ret = _peStream.CanWrite && _peStream.CanSeek && _peStream.CanRead;
-            ret &= dataExtractor.IsValidAssembly;
             ret &= !HasStrongNameSignature();
             ret &= _hashAlgorithm != null;
             ret &= SupportsHashAlgorithm(PublicKeyBlob.HashAlgorithm);
@@ -91,13 +91,13 @@ namespace SigningService.Signers.StrongName
         {
             get
             {
-                return _peStream.CanSeek && _peStream.CanRead && _dataExtractor.Value.IsValidAssembly;
+                return _peStream.CanSeek && _peStream.CanRead;
             }
         }
 
         public void EmbedStrongNameSignature(byte[] signature)
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
 
             if (!dataExtractor.HasStrongNameSignatureDirectory)
             {
@@ -119,7 +119,7 @@ namespace SigningService.Signers.StrongName
 
         public void EmbedEmptyStrongNameSignature()
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
             byte[] signature = new byte[dataExtractor.StrongNameSignatureDirectorySize];
             EmbedStrongNameSignature(signature);
         }
@@ -138,7 +138,7 @@ namespace SigningService.Signers.StrongName
         {
             get
             {
-                StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+                AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
                 if (dataExtractor.AssemblySignatureKeyPublicKey != null)
                 {
                     return dataExtractor.AssemblySignatureKeyPublicKey;
@@ -170,7 +170,7 @@ namespace SigningService.Signers.StrongName
 
         public void RemoveSignature()
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
             if (!HasStrongNameSignature())
             {
                 // nothing to do
@@ -186,9 +186,9 @@ namespace SigningService.Signers.StrongName
         /// Initializes lazy private field _dataExtractor
         /// </summary>
         /// <returns>Data extractor for PE file with CLI metadata</returns>
-        private StrongNameSignerDataExtractor InitDataExtractor()
+        private AssemblyMetadataExtractor InitDataExtractor()
         {
-            return new StrongNameSignerDataExtractor(_peStream);
+            return new AssemblyMetadataExtractor(_peStream);
         }
 
         /// <summary>
@@ -208,6 +208,49 @@ namespace SigningService.Signers.StrongName
         {
             return HashingHelpers.CreateHashAlgorithm(PublicKeyBlob.HashAlgorithm);
         }
+
+        /// <summary>
+        /// Initializes lazy private field _hashingBlocks which decides what parts of PE will be hashed
+        /// </summary>
+        private List<HashingBlock> InitHashingBlocks()
+        {
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
+
+            List<HashingBlock> hashingBlocks = new List<HashingBlock>(16);
+
+            hashingBlocks.Add(new HashingBlock(HashingBlockHashing.Hash, "PE Headers", 0, dataExtractor.PaddingBetweenTheSectionHeadersAndSectionsOffset));
+            foreach (var section in dataExtractor.SectionsInfo)
+            {
+                string name = string.Format("Section {0}", section.Name);
+                hashingBlocks.Add(new HashingBlock(HashingBlockHashing.Hash, name, section.Offset, section.Size));
+            }
+
+            hashingBlocks.Add(new HashingBlock(HashingBlockHashing.HashZeros, "Checksum", dataExtractor.ChecksumOffset, dataExtractor.ChecksumSize));
+
+            // According to ECMA-335 this block should be zeroed and hashed (HashingBlockHashing.HashZeros)
+            // For compat reasons we fully hash it
+            //specialHashingBlocks.Add(new HashingBlock(HashingBlockHashing.Hash, "StrongNameSignatureDirectory header", StrongNameSignatureDirectoryHeaderOffset, StrongNameSignatureDirectoryHeaderSize));
+            
+            hashingBlocks.Add(new HashingBlock(HashingBlockHashing.HashZeros, "CertificateTableDirectory header", dataExtractor.CertificateTableDirectoryHeaderOffset, dataExtractor.CertificateTableDirectoryHeaderSize));
+
+            if (dataExtractor.HasStrongNameSignatureDirectory)
+            {
+                hashingBlocks.Add(new HashingBlock(HashingBlockHashing.Skip, "StrongNameSignatureDirectory", dataExtractor.StrongNameSignatureDirectoryOffset, dataExtractor.StrongNameSignatureDirectorySize));
+            }
+            else
+            {
+                ExceptionsHelper.ThrowNoStrongNameSignatureDirectory();
+            }
+
+            // In theory we should be hashing it, in practice in some cases it might be past the last section
+            // and for compat reasons we do not.
+            //if (HasCertificateTableDirectory)
+            //{
+            //    specialHashingBlocks.Add(new DataBlock(DataBlockHashing.Hash, "CertificateTableDirectory", CertificateTableDirectoryOffset, CertificateTableDirectorySize));
+            //}
+
+            return HashingHelpers.SortAndJoinIntersectingHashingBlocks(hashingBlocks);
+        }
 #endregion
 
         private byte[] PrepareForSigningAndComputeHash(Stream writablePEStream)
@@ -215,7 +258,7 @@ namespace SigningService.Signers.StrongName
             ExceptionsHelper.ThrowIfStreamNotWritable(writablePEStream);
 
             PrepareForSigning(writablePEStream);
-            return HashingHelpers.CalculateAssemblyHash(writablePEStream, _hashAlgorithm.Value, _dataExtractor.Value.HashingBlocks);
+            return HashingHelpers.CalculateAssemblyHash(writablePEStream, _hashAlgorithm.Value, _hashingBlocks.Value);
         }
 
         private void PrepareForSigning(Stream writablePEStream)
@@ -226,7 +269,7 @@ namespace SigningService.Signers.StrongName
 
         public byte[] ExtractStrongNameSignature()
         {
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
             if (!HasStrongNameSignature())
             {
                 ExceptionsHelper.ThrowNoStrongNameSignature();
@@ -254,7 +297,7 @@ namespace SigningService.Signers.StrongName
         {
             ExceptionsHelper.ThrowIfStreamNotWritable(writablePEStream);
 
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
 
             // 0-initialized byte array
             byte[] newChecksum = new byte[dataExtractor.ChecksumSize];
@@ -271,7 +314,7 @@ namespace SigningService.Signers.StrongName
         {
             ExceptionsHelper.ThrowIfStreamNotWritable(writablePEStream);
 
-            StrongNameSignerDataExtractor dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
 
             using (BinaryWriter bw = new BinaryWriter(writablePEStream, Encoding.ASCII, leaveOpen : true))
             {
@@ -303,7 +346,7 @@ namespace SigningService.Signers.StrongName
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
-            var dataExtractor = _dataExtractor.Value;
+            AssemblyMetadataExtractor dataExtractor = _dataExtractor.Value;
 
             sb.AppendLine("Signature directory size: {0}", dataExtractor.StrongNameSignatureDirectorySize);
             sb.AppendLine("AssemblyDefinition Hash Algorithm: {0}", AssemblyDefinitionPublicKeyBlob.HashAlgorithm);
@@ -316,18 +359,16 @@ namespace SigningService.Signers.StrongName
             sb.AppendLine("Calculated hash size: {0}", hash.Length);
             sb.AppendLine("Calculated hash: {0}", hash.ToHex());
 
-            foreach (var block in dataExtractor.HashingBlocks)
+            foreach (var block in _hashingBlocks.Value)
             {
                 sb.AppendLine(block.ToString());
             }
 
             sb.AppendLine("NumberOfSections = {0}", dataExtractor.NumberOfSections);
             sb.AppendLine("SectionsHeadersEndOffset = {0}", dataExtractor.SectionsHeadersEndOffset);
-            sb.AppendLine("SectionsStartOffset = {0}", dataExtractor.SectionsStartOffset);
             foreach (SectionInfo section in dataExtractor.SectionsInfo)
             {
-                string name = section.Name.RemoveSpecialCharacters();
-                sb.AppendLine("SECTION(Name = {0}, Start = {1}, Size = {2})", name, section.Offset, section.Size);
+                sb.AppendLine(section.ToString());
             }
 
             return sb.ToString();

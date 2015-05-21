@@ -3,12 +3,11 @@ using SigningService.Models;
 using System;
 using System.IO;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace SigningService.Signers.StrongName
 {
-    // Public Key Blob should looks as following:
+    // Public Key Blob should look as following:
     // 12 bytes header:
     //      - Signature Algorithm Id (4 bytes)
     //      - Hash Algorithm Id (4 bytes)

@@ -5,24 +5,6 @@ namespace SigningService.Extensions
 {
     internal static class ByteArrayExt
     {
-        public static bool ContainsSubarray(this byte[] array, int atOffset, byte[] subArray)
-        {
-            if (atOffset + subArray.Length > array.Length)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < subArray.Length; i++)
-            {
-                if (array[atOffset + i] != subArray[i])
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
         public static void ReverseInplace(this byte[] bytes)
         {
             int i = 0, j = bytes.Length - 1;

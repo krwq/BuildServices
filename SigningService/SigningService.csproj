@@ -377,7 +377,7 @@
     <Compile Include="Signers\StrongName\PublicKeyBlob.cs" />
     <Compile Include="Signers\StrongName\SectionInfo.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerHelper.cs" />
-    <Compile Include="Signers\StrongName\StrongNameSignerDataExtractor.cs" />
+    <Compile Include="Signers\StrongName\AssemblyMetadataExtractor.cs" />
     <Compile Include="Signers\StrongName\StrongNameSignerException.cs" />
     <Compile Include="Signers\StrongName\StrongNameSigner.cs" />
   </ItemGroup>

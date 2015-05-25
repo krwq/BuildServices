@@ -119,7 +119,9 @@ namespace SigningService.Signers.StrongName
                         if (args.Count == 2)
                         {
                             AssemblySignatureKeyAttributePublicKeyBlob = new PublicKeyBlob(args[0]);
-                            AssemblySignatureKeyAttributeCounterSignatureBlob = ByteArrayExt.FromHex(args[1]);
+                            byte[] counterSignature = args[1].FromHexToByteArray();
+                            counterSignature.ReverseInplace();
+                            AssemblySignatureKeyAttributeCounterSignatureBlob = counterSignature;
                         }
                     }
                 }

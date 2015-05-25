@@ -26,18 +26,6 @@ namespace SigningService.Tests
         public void Hash_test(TestAssembly testAssembly)
         {
             output.WriteLine("Assembly: {0}", testAssembly.ResourceName);
-            //var keyVaultAgentMock = new Mock<IKeyVaultAgent>(MockBehavior.Strict);
-
-            //string keyId = Any.String(4, 10, "uvwxyz");
-            //byte[] expectedSignature = Any.Sequence(i => Any.Byte(), 256).ToArray();
-
-            //keyVaultAgentMock
-            //    .Setup(k => k.SignAsync(It.Is<string>(s => s.Equals(keyId)), It.IsAny<byte[]>()))
-            //    .Returns(Task.FromResult(expectedSignature));
-            //keyVaultAgentMock
-            //    .Setup(k => k.GetRsaKeyIdAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>()))
-            //    .Returns(Task.FromResult(keyId));
-            // IKeyVaultAgent agent = keyVaultAgentMock.Object;
 
             using (Stream outputPeImage = testAssembly.GetWritablePEImage())
             {
@@ -47,9 +35,6 @@ namespace SigningService.Tests
                 output.WriteLine(strongNameSigner.ToString());
                 strongNameSigner.ComputeHash().Should().BeEquivalentTo(testAssembly.StrongNameSignatureHash);
             }
-
-            //keyVaultAgentMock.Verify(k => k.SignAsync(It.IsAny<string>(), It.IsAny<byte[]>()), Times.Once);
-            //keyVaultAgentMock.Verify(k => k.GetRsaKeyIdAsync(It.IsAny<byte[]>(), It.IsAny<byte[]>()), Times.Once);
         }
 
         // Use this test method if sn.exe doesn't let you get the digest file from signed dll file

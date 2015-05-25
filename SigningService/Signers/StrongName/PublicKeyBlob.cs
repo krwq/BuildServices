@@ -104,7 +104,7 @@ namespace SigningService.Signers.StrongName
         }
 
         public PublicKeyBlob(string publicKeyBlobHex)
-            : this(ByteArrayExt.FromHex(publicKeyBlobHex)) { }
+            : this(publicKeyBlobHex.FromHexToByteArray()) { }
 
         private Lazy<string> _publicKeyToken;
         public byte[] Blob { get; private set; }
@@ -125,6 +125,53 @@ namespace SigningService.Signers.StrongName
             }
             
             return ret.ToHex();
+        }
+
+        /// <summary>
+        /// Hashes the data, decrypts the hash and compares
+        /// </summary>
+        /// <param name="data"></param>
+        /// <returns></returns>
+        public bool VerifyData(byte[] data, byte[] signature)
+        {
+            //byte[] decryptedHash = PublicKey.Encrypt(encryptedHash);
+            HashAlgorithm hashAlgorithm = HashingHelpers.CreateHashAlgorithm(HashAlgorithm);
+            if (hashAlgorithm == null)
+            {
+                ExceptionsHelper.ThrowArgumentOutOfRange("HashAlgorithm");
+            }
+
+            RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
+            RSAParameters rsap = rsa.ExportParameters(false);
+            // Trailing zeros do not change Exponent/Modulus value
+            // but cause CryptoProvider to throw
+            rsap.Exponent = RemoveTrailingZeros(PublicKey.Exponent);
+            rsap.Modulus = RemoveTrailingZeros(PublicKey.Modulus);
+            rsa.ImportParameters(rsap);
+
+            return rsa.VerifyData(data, hashAlgorithm.GetType(), signature);
+        }
+
+        private static byte[] RemoveTrailingZeros(byte[] bytes)
+        {
+            int lastByte = bytes.Length - 1;
+            for (; lastByte > 0; lastByte--)
+            {
+                if (bytes[lastByte] != 0)
+                {
+                    break;
+                }
+            }
+
+            byte[] ret = new byte[lastByte + 1];
+            Array.Copy(bytes, 0, ret, 0, ret.Length);
+
+            return ret;
+        }
+
+        public override string ToString()
+        {
+            return Blob.ToHex();
         }
     }
 }

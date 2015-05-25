@@ -29,7 +29,7 @@ namespace SigningService.Signers.StrongName
         }
 
 #region StrongNameSignature
-        public bool CanEmbedSignature { get { return CanHash & _peStream.CanWrite; } }
+        public bool CanEmbedSignature { get { return CanSign & _peStream.CanWrite; } }
         public bool HasStrongNameSignature
         {   
             get
@@ -161,6 +161,14 @@ namespace SigningService.Signers.StrongName
             }
         }
 
+        public bool CanSign
+        {
+            get
+            {
+                return CanHash && VerifyCounterSignature();
+            }
+        }
+
         public byte[] ComputeHash()
         {
             if (!CanHash)
@@ -174,6 +182,11 @@ namespace SigningService.Signers.StrongName
                 _peStream.CopyTo(ms);
                 return PrepareForSigningAndComputeHash(ms);
             }
+        }
+
+        public byte[] PrepareForSigningAndComputeHash()
+        {
+            return PrepareForSigningAndComputeHash(_peStream);
         }
 
         private byte[] PrepareForSigningAndComputeHash(Stream writablePEStream)
@@ -210,6 +223,19 @@ namespace SigningService.Signers.StrongName
         public PublicKeyBlob IdentityPublicKeyBlob { get { return AssemblyDefinitionPublicKeyBlob; } }
         public PublicKeyBlob AssemblyDefinitionPublicKeyBlob { get { return _dataExtractor.Value.AssemblyDefinitionPublicKeyBlob; } }
         public PublicKeyBlob AssemblySignatureKeyAttributePublicKeyBlob { get { return _dataExtractor.Value.AssemblySignatureKeyAttributePublicKeyBlob; } }
+
+        public byte[] CounterSignature { get { return _dataExtractor.Value.AssemblySignatureKeyAttributeCounterSignatureBlob; } }
+        public bool VerifyCounterSignature()
+        {
+            if (HasUniqueSignatureAndIdentityPublicKeyBlobs)
+            {
+                return IdentityPublicKeyBlob.VerifyData(SignaturePublicKeyBlob.Blob, CounterSignature);
+            }
+
+            // If no counter signature then verification passes since there is nothing to verify
+            return true;
+        }
+
 #endregion
 
 #region Lazy fields initializers
@@ -301,9 +327,15 @@ namespace SigningService.Signers.StrongName
 
             sb.AppendLine("Signature directory size: {0}", dataExtractor.StrongNameSignatureDirectorySize);
             sb.AppendLine("AssemblyDefinition hash algorithm: {0}", AssemblyDefinitionPublicKeyBlob.HashAlgorithm);
+            sb.AppendLine("Identity public key: {0}", IdentityPublicKeyBlob.ToString());
+            sb.AppendLine("Identity public key: {0}", IdentityPublicKeyBlob.PublicKey.ToString());
             if (HasUniqueSignatureAndIdentityPublicKeyBlobs)
             {
+                sb.AppendLine("Signature public key: {0}", SignaturePublicKeyBlob.ToString());
+                sb.AppendLine("Signature public key: {0}", SignaturePublicKeyBlob.PublicKey.ToString());
+                sb.AppendLine("Counter signature: {0}", CounterSignature.ToHex());
                 sb.AppendLine("AssemblySignatureKeyAttribute hash algorithm: {0}", AssemblySignatureKeyAttributePublicKeyBlob.HashAlgorithm);
+
             }
             byte[] hash = ComputeHash();
 

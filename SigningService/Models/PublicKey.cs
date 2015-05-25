@@ -93,5 +93,10 @@ namespace SigningService.Models
 
             return Equals(pk);
         }
+
+        public override string ToString()
+        {
+            return string.Format("PublicKey(Exponent: {0}, Modulus: {1})", Exponent.ToHex(), Modulus.ToHex());
+        }
     }
 }

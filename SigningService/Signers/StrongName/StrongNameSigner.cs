@@ -24,7 +24,7 @@ namespace SigningService.Signers.StrongName
                     return false;
                 }
 
-                byte[] hash = strongNameSigner.ComputeHash();
+                byte[] hash = strongNameSigner.PrepareForSigningAndComputeHash();
 
                 string keyId = await GetKeyVaultId(strongNameSigner);
                 if (keyId == null)

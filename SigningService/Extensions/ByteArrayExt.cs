@@ -18,6 +18,16 @@ namespace SigningService.Extensions
             }
         }
 
+        public static byte[] Reverse(this byte[] bytes)
+        {
+            byte[] ret = new byte[bytes.Length];
+            for (int i = 0, j = bytes.Length - 1; j >= 0; i++, j--)
+            {
+                ret[i] = bytes[j];
+            }
+            return ret;
+        }
+
         public static bool IsEquivalentTo(this byte[] a, byte[] b)
         {
             if (a == b)
@@ -59,7 +69,7 @@ namespace SigningService.Extensions
 
         // Dummy implementation
         // No need for anything faster
-        public static byte[] FromHex(string hex)
+        public static byte[] FromHexToByteArray(this string hex)
         {
             byte[] ret = new byte[hex.Length / 2];
             for (int i = 0, j = 0; i < ret.Length; i++, j += 2)

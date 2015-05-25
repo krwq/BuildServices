@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using FluentAssertions;
 
 namespace SigningService.Tests.Utils
 {
@@ -25,6 +26,20 @@ namespace SigningService.Tests.Utils
                     yield return new object[] { assembly };
                 }
             }
+        }
+
+        public static TestAssembly GetJScript()
+        {
+            foreach (var assembly in TestAssembly.GetTestAssemblies())
+            {
+                if (assembly.ResourceName == "Microsoft.JScript.dll")
+                {
+                    return assembly;
+                }
+            }
+
+            true.Should().BeFalse("Microsoft.JScript.dll missing");
+            return new TestAssembly();
         }
     }
 }

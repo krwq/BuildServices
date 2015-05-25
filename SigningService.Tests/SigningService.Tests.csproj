@@ -154,7 +154,9 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="StrongName\CounterSignatureVerificationTests.cs" />
     <Compile Include="StrongName\StrongNameSignerHelperSpecs.cs" />
+    <Compile Include="StrongName\StrongNameSignerSpecs.cs" />
     <Compile Include="Utils\TestAssembly.cs" />
     <Compile Include="Utils\TestData.cs" />
   </ItemGroup>
